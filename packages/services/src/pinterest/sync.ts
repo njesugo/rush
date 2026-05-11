@@ -11,13 +11,98 @@ export interface SyncResult {
   disabled?: boolean;
 }
 
-interface WorkerItem {
+export interface WorkerItem {
   id: string;
   url: string;
   pin_url?: string | null;
   source?: string | null;
   action: "kept" | "skipped";
   swiped_at?: string | null;
+}
+
+export interface ProcessItemsResult {
+  downloaded: number;
+  skipped: number;
+  errors: number;
+  ackIds: string[];
+}
+
+/**
+ * Apply a batch of worker swipe items to the database (idempotent on workerId).
+ * Returns counts and the list of worker ids that were successfully processed
+ * (i.e. that the caller can ack back to the Cloudflare worker).
+ */
+export async function processWorkerItems(items: WorkerItem[]): Promise<ProcessItemsResult> {
+  const db = getDb();
+  let downloaded = 0;
+  let skipped = 0;
+  let errors = 0;
+  const ackIds: string[] = [];
+
+  for (const it of items) {
+    if (!it || !it.id || !it.url) continue;
+
+    const [existing] = await db
+      .select({ id: pinterestAssets.id })
+      .from(pinterestAssets)
+      .where(eq(pinterestAssets.workerId, it.id))
+      .limit(1);
+    if (existing) {
+      ackIds.push(it.id);
+      continue;
+    }
+
+    if (it.action === "skipped") {
+      await db.insert(pinterestAssets).values({
+        workerId: it.id,
+        url: it.url,
+        pinUrl: it.pin_url ?? null,
+        source: it.source ?? null,
+        action: "skipped",
+        swipedAt: it.swiped_at ? new Date(it.swiped_at) : null,
+      });
+      skipped++;
+      ackIds.push(it.id);
+      continue;
+    }
+
+    try {
+      const buf = await downloadBuffer(it.url);
+      const ext = safeExtFromUrl(it.url);
+      const hash = createHash("sha1").update(buf).digest("hex").slice(0, 12);
+      const filename = `pin_${hash}${ext}`;
+      const upload = await ingestUpload({ filename, buffer: buf, source: "pinterest" });
+
+      await db.insert(pinterestAssets).values({
+        workerId: it.id,
+        url: it.url,
+        pinUrl: it.pin_url ?? null,
+        source: it.source ?? null,
+        action: "kept",
+        swipedAt: it.swiped_at ? new Date(it.swiped_at) : null,
+        filename,
+        imageId: upload.imageId,
+        downloadedAt: new Date(),
+      });
+      downloaded++;
+      ackIds.push(it.id);
+    } catch (err) {
+      const msg = (err as Error).message;
+      console.warn(`[pinterest] download failed ${it.url}:`, msg);
+      await db.insert(pinterestAssets).values({
+        workerId: it.id,
+        url: it.url,
+        pinUrl: it.pin_url ?? null,
+        source: it.source ?? null,
+        action: "kept",
+        swipedAt: it.swiped_at ? new Date(it.swiped_at) : null,
+        error: msg,
+      });
+      errors++;
+    }
+  }
+
+  return { downloaded, skipped, errors, ackIds };
 }
 
 function workerEndpoint(p: string): string {
@@ -58,8 +143,6 @@ export async function syncPending(): Promise<SyncResult> {
     return { pulled: 0, downloaded: 0, skipped: 0, errors: 0, disabled: true };
   }
 
-  const db = getDb();
-
   // 1) Pull pending
   let payload: { items?: WorkerItem[] };
   try {
@@ -74,78 +157,7 @@ export async function syncPending(): Promise<SyncResult> {
   const items = Array.isArray(payload.items) ? payload.items : [];
   if (items.length === 0) return { pulled: 0, downloaded: 0, skipped: 0, errors: 0 };
 
-  let downloaded = 0;
-  let skipped = 0;
-  let errors = 0;
-  const ackIds: string[] = [];
-
-  for (const it of items) {
-    if (!it || !it.id || !it.url) continue;
-
-    // Skip if we already saw this worker_id
-    const [existing] = await db
-      .select({ id: pinterestAssets.id })
-      .from(pinterestAssets)
-      .where(eq(pinterestAssets.workerId, it.id))
-      .limit(1);
-    if (existing) {
-      ackIds.push(it.id);
-      continue;
-    }
-
-    if (it.action === "skipped") {
-      await db.insert(pinterestAssets).values({
-        workerId: it.id,
-        url: it.url,
-        pinUrl: it.pin_url ?? null,
-        source: it.source ?? null,
-        action: "skipped",
-        swipedAt: it.swiped_at ? new Date(it.swiped_at) : null,
-      });
-      skipped++;
-      ackIds.push(it.id);
-      continue;
-    }
-
-    // kept → download into bank as a raw upload (auto bg-removal)
-    try {
-      const buf = await downloadBuffer(it.url);
-      const ext = safeExtFromUrl(it.url);
-      const hash = createHash("sha1").update(buf).digest("hex").slice(0, 12);
-      const filename = `pin_${hash}${ext}`;
-
-      const upload = await ingestUpload({ filename, buffer: buf, source: "pinterest" });
-
-      await db.insert(pinterestAssets).values({
-        workerId: it.id,
-        url: it.url,
-        pinUrl: it.pin_url ?? null,
-        source: it.source ?? null,
-        action: "kept",
-        swipedAt: it.swiped_at ? new Date(it.swiped_at) : null,
-        filename,
-        imageId: upload.imageId,
-        downloadedAt: new Date(),
-      });
-
-      downloaded++;
-      ackIds.push(it.id);
-    } catch (err) {
-      const msg = (err as Error).message;
-      console.warn(`[pinterest] download failed ${it.url}:`, msg);
-      await db.insert(pinterestAssets).values({
-        workerId: it.id,
-        url: it.url,
-        pinUrl: it.pin_url ?? null,
-        source: it.source ?? null,
-        action: "kept",
-        swipedAt: it.swiped_at ? new Date(it.swiped_at) : null,
-        error: msg,
-      });
-      errors++;
-      // do NOT ack — allow retry
-    }
-  }
+  const { downloaded, skipped, errors, ackIds } = await processWorkerItems(items);
 
   // 2) Ack the worker
   if (ackIds.length > 0) {
