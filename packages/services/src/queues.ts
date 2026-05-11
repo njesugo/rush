@@ -9,6 +9,8 @@ export const QUEUE_NAMES = {
   newsScrape: "news-scrape",
   carouselGenerate: "carousel-generate",
   pinterestSync: "pinterest-sync",
+  carouselRender: "carousel-render",
+  carouselPublish: "carousel-publish",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -47,6 +49,18 @@ export interface PinterestSyncJobData {
   triggeredBy?: string;
 }
 
+export interface CarouselRenderJobData {
+  carouselId: number;
+  format?: "1:1" | "4:5";
+}
+
+export interface CarouselPublishJobData {
+  carouselId: number;
+  scheduledAt?: string | null;
+  format?: "1:1" | "4:5";
+  forceRerender?: boolean;
+}
+
 /* ---------- Queue singletons ---------- */
 const _queues = new Map<string, Queue>();
 
@@ -75,5 +89,10 @@ export const carouselGenerateQueue = () =>
   makeQueue<CarouselGenerateJobData>(QUEUE_NAMES.carouselGenerate);
 export const pinterestSyncQueue = () =>
   makeQueue<PinterestSyncJobData>(QUEUE_NAMES.pinterestSync);
+
+export const carouselRenderQueue = () =>
+  makeQueue<CarouselRenderJobData>(QUEUE_NAMES.carouselRender);
+export const carouselPublishQueue = () =>
+  makeQueue<CarouselPublishJobData>(QUEUE_NAMES.carouselPublish);
 
 export type { JobsOptions };

@@ -5,6 +5,8 @@ import { startBgRemovalWorker } from "./bgRemovalWorker";
 import { startNewsScrapeWorker } from "./newsScrapeWorker";
 import { startCarouselGenerateWorker } from "./carouselGenerateWorker";
 import { startPinterestSyncWorker } from "./pinterestSyncWorker";
+import { startCarouselRenderWorker } from "./carouselRenderWorker";
+import { startCarouselPublishWorker } from "./carouselPublishWorker";
 
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set");
@@ -13,7 +15,14 @@ async function main(): Promise<void> {
   await ensureBankDirs();
   logger.info("Rush worker starting…");
 
-  const workers = [startBgRemovalWorker(), startNewsScrapeWorker(), startCarouselGenerateWorker(), startPinterestSyncWorker()];
+  const workers = [
+    startBgRemovalWorker(),
+    startNewsScrapeWorker(),
+    startCarouselGenerateWorker(),
+    startPinterestSyncWorker(),
+    startCarouselRenderWorker(),
+    startCarouselPublishWorker(),
+  ];
 
   const shutdown = async (signal: string) => {
     logger.info({ signal }, "shutting down workers");

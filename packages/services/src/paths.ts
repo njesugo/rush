@@ -14,9 +14,10 @@ export const RAW_DIR = path.join(BANK_DIR, "raw");
 export const GENERIC_DIR = path.join(BANK_DIR, "generic");
 export const DONE_DIR = path.join(BANK_DIR, "done");
 export const FAIL_DIR = path.join(BANK_DIR, "fail");
+export const OUTPUT_DIR = path.join(BANK_DIR, "output");
 
 export async function ensureBankDirs(): Promise<void> {
-  for (const d of [BANK_DIR, RAW_DIR, GENERIC_DIR, DONE_DIR, FAIL_DIR]) {
+  for (const d of [BANK_DIR, RAW_DIR, GENERIC_DIR, DONE_DIR, FAIL_DIR, OUTPUT_DIR]) {
     await fs.mkdir(d, { recursive: true });
   }
 }

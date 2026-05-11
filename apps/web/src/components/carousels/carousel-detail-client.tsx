@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Save, RefreshCw, Trash2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Loader2, Save, RefreshCw, Trash2, AlertCircle, ImageIcon, Send, Calendar, ExternalLink } from "lucide-react";
 import { useJobsStream } from "@/lib/use-jobs-stream";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,11 @@ interface CarouselDetail {
   scheduledAt: string | null;
   publerJobId: string | null;
   publerPostId: string | null;
+  publerPostUrl: string | null;
+  publishedAt: string | null;
+  renderedAt: string | null;
+  renderedPaths: string[] | null;
+  renderFormat: "1:1" | "4:5" | null;
   error: string | null;
   createdAt: string;
   updatedAt: string;
@@ -47,6 +52,10 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
   const [saving, setSaving] = React.useState(false);
   const [regenerating, setRegenerating] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
+  const [rendering, setRendering] = React.useState(false);
+  const [publishing, setPublishing] = React.useState(false);
+  const [scheduleAt, setScheduleAt] = React.useState<string>("");
+  const [renderFormat, setRenderFormat] = React.useState<"1:1" | "4:5">("4:5");
 
   const fetchItem = React.useCallback(async () => {
     const res = await fetch(`/api/carousels/${carouselId}`);
@@ -68,7 +77,12 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
   }, [fetchItem]);
 
   useJobsStream((evt) => {
-    if (!("queue" in evt) || evt.queue !== "carousel-generate") return;
+    if (!("queue" in evt)) return;
+    const isRender = evt.queue === "carousel-render";
+    const isPublish = evt.queue === "carousel-publish";
+    const isGenerate = evt.queue === "carousel-generate";
+    if (!isRender && !isPublish && !isGenerate) return;
+
     const targetId =
       evt.type === "completed"
         ? (evt.result as { carouselId?: number } | undefined)?.carouselId
@@ -76,15 +90,27 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
           ? (evt.payload as { carouselId?: number } | undefined)?.carouselId
           : undefined;
     if (targetId !== carouselId && evt.type !== "failed") return;
+
     if (evt.type === "completed") {
-      toast.success("Carousel régénéré");
+      if (isRender) {
+        toast.success("Slides rendues");
+        setRendering(false);
+      } else if (isPublish) {
+        const r = evt.result as { scheduled?: boolean; url?: string | null } | undefined;
+        toast.success(r?.scheduled ? "Carousel planifié" : "Carousel publié");
+        setPublishing(false);
+      } else {
+        toast.success("Carousel régénéré");
+        setRegenerating(false);
+      }
       void fetchItem();
-      setRegenerating(false);
     }
     if (evt.type === "failed") {
       toast.error(`Échec : ${evt.error}`);
       void fetchItem();
       setRegenerating(false);
+      setRendering(false);
+      setPublishing(false);
     }
   });
 
@@ -141,6 +167,50 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
       return;
     }
     router.push("/carousels");
+  }
+
+  async function handleRender() {
+    setRendering(true);
+    try {
+      const res = await fetch(`/api/carousels/${carouselId}/render`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ format: renderFormat }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("Rendu en cours…");
+    } catch (err) {
+      toast.error(`Échec rendu : ${(err as Error).message}`);
+      setRendering(false);
+    }
+  }
+
+  async function handlePublish(scheduledAt: string | null) {
+    if (dirty) {
+      toast.error("Enregistre d'abord les modifications");
+      return;
+    }
+    if (!item?.caption || !item.caption.trim()) {
+      toast.error("Caption vide");
+      return;
+    }
+    setPublishing(true);
+    try {
+      const res = await fetch(`/api/carousels/${carouselId}/publish`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          scheduledAt: scheduledAt ?? null,
+          format: renderFormat,
+          forceRerender: false,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success(scheduledAt ? "Planification en cours…" : "Publication en cours…");
+    } catch (err) {
+      toast.error(`Échec : ${(err as Error).message}`);
+      setPublishing(false);
+    }
   }
 
   if (loading) {
@@ -214,6 +284,34 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         {/* Slides */}
         <div className="space-y-3">
+          {/* Rendered previews row */}
+          {item.renderedPaths && item.renderedPaths.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-medium uppercase tracking-wide text-text-muted">
+                  Aperçu PNG ({item.renderedPaths.length})
+                </h2>
+                <span className="text-[10px] text-text-muted">
+                  {item.renderFormat ?? "4:5"} ·{" "}
+                  {item.renderedAt
+                    ? new Date(item.renderedAt).toLocaleString("fr-FR")
+                    : ""}
+                </span>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {item.renderedPaths.map((_, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={i}
+                    src={`/api/carousels/${carouselId}/preview/${i + 1}`}
+                    alt={`Slide ${i + 1}`}
+                    className="h-44 w-auto flex-shrink-0 rounded-md border border-border bg-surface-2 object-cover"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           <h2 className="text-sm font-medium uppercase tracking-wide text-text-muted">
             Slides ({slides.length})
           </h2>
@@ -231,6 +329,103 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
 
         {/* Sidebar */}
         <aside className="space-y-6">
+          {/* Publish panel */}
+          <section className="space-y-3 rounded-md border border-border bg-surface p-4">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-text-muted">
+              Publication
+            </h2>
+
+            {item.publerPostUrl && (
+              <a
+                href={item.publerPostUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" strokeWidth={1.5} />
+                Voir sur Instagram
+              </a>
+            )}
+            {item.publishedAt && (
+              <p className="text-[10px] text-text-muted">
+                Publié le {new Date(item.publishedAt).toLocaleString("fr-FR")}
+              </p>
+            )}
+            {item.scheduledAt && item.status === "scheduled" && (
+              <p className="text-[10px] text-text-muted">
+                Planifié le {new Date(item.scheduledAt).toLocaleString("fr-FR")}
+              </p>
+            )}
+
+            <div className="flex items-center gap-2">
+              <label className="text-[10px] uppercase tracking-wide text-text-muted">
+                Format
+              </label>
+              <select
+                value={renderFormat}
+                onChange={(e) => setRenderFormat(e.target.value as "1:1" | "4:5")}
+                className="rounded-md border border-border bg-surface-2 px-2 py-1 text-xs"
+              >
+                <option value="4:5">4 : 5 (1080×1350)</option>
+                <option value="1:1">1 : 1 (1080×1080)</option>
+              </select>
+            </div>
+
+            <button
+              onClick={() => void handleRender()}
+              disabled={rendering || slides.length === 0}
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm hover:border-border-hover hover:bg-surface-2 disabled:opacity-50"
+            >
+              {rendering ? (
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+              ) : (
+                <ImageIcon className="h-4 w-4" strokeWidth={1.5} />
+              )}
+              {item.renderedPaths?.length ? "Re-rendre les PNG" : "Rendre les PNG"}
+            </button>
+
+            <button
+              onClick={() => void handlePublish(null)}
+              disabled={publishing || !item.caption?.trim()}
+              className="flex w-full items-center justify-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:bg-accent/90 disabled:opacity-50"
+            >
+              {publishing ? (
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+              ) : (
+                <Send className="h-4 w-4" strokeWidth={1.5} />
+              )}
+              Publier maintenant
+            </button>
+
+            <div className="space-y-2 border-t border-border pt-3">
+              <label className="block space-y-1">
+                <span className="text-[10px] uppercase tracking-wide text-text-muted">
+                  Planifier à
+                </span>
+                <input
+                  type="datetime-local"
+                  value={scheduleAt}
+                  onChange={(e) => setScheduleAt(e.target.value)}
+                  className="w-full rounded-md border border-border bg-surface-2 px-2 py-1 text-sm focus:border-accent focus:outline-none"
+                />
+              </label>
+              <button
+                onClick={() => {
+                  if (!scheduleAt) {
+                    toast.error("Sélectionne une date");
+                    return;
+                  }
+                  void handlePublish(new Date(scheduleAt).toISOString());
+                }}
+                disabled={publishing || !scheduleAt || !item.caption?.trim()}
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm hover:border-border-hover hover:bg-surface-2 disabled:opacity-50"
+              >
+                <Calendar className="h-4 w-4" strokeWidth={1.5} />
+                Planifier
+              </button>
+            </div>
+          </section>
+
           <section>
             <h2 className="text-sm font-medium uppercase tracking-wide text-text-muted">
               Caption
