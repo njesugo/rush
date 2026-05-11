@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1.7
+# ---- Worker (BullMQ + bg-removal + render) ----
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+WORKDIR /app
+
+# --- deps (incl. dev so tsx is available) ---
+FROM base AS deps
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* ./
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+COPY packages/db/package.json packages/db/
+COPY packages/shared/package.json packages/shared/
+COPY packages/services/package.json packages/services/
+RUN pnpm install --frozen-lockfile
+
+# --- runtime ---
+FROM base AS runner
+ENV NODE_ENV=production
+ENV BANK_DIR=/data/bank
+
+COPY --from=deps /app /app
+COPY packages packages
+COPY apps/worker apps/worker
+
+# Workspace package sources used by the worker at runtime
+WORKDIR /app
+RUN mkdir -p /data/bank
+
+CMD ["pnpm", "--filter", "@rush/worker", "start"]

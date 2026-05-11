@@ -15,12 +15,12 @@ const VALID_ACTIONS = new Set<JobAction>([
 
 export async function POST(
   req: NextRequest,
-  ctx: { params: { name: string } }
+  ctx: { params: Promise<{ name: string }> }
 ): Promise<NextResponse> {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const { name } = ctx.params;
+  const { name } = await ctx.params;
   if (!isKnownQueueName(name)) return NextResponse.json({ error: "unknown queue" }, { status: 404 });
 
   const body = (await req.json().catch(() => ({}))) as { action?: string; jobId?: string };
