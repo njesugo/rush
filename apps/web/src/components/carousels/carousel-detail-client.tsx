@@ -56,6 +56,21 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
   const [publishing, setPublishing] = React.useState(false);
   const [scheduleAt, setScheduleAt] = React.useState<string>("");
   const [renderFormat, setRenderFormat] = React.useState<"1:1" | "4:5">("4:5");
+  const [lightboxIndex, setLightboxIndex] = React.useState<number | null>(null);
+
+  const previewCount = item?.renderedPaths?.length ?? 0;
+  React.useEffect(() => {
+    if (lightboxIndex === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxIndex(null);
+      else if (e.key === "ArrowLeft")
+        setLightboxIndex((i) => (i === null ? null : (i - 1 + previewCount) % previewCount));
+      else if (e.key === "ArrowRight")
+        setLightboxIndex((i) => (i === null ? null : (i + 1) % previewCount));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxIndex, previewCount]);
 
   const fetchItem = React.useCallback(async () => {
     const res = await fetch(`/api/carousels/${carouselId}`);
@@ -305,7 +320,8 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
                     key={i}
                     src={`/api/carousels/${carouselId}/preview/${i + 1}`}
                     alt={`Slide ${i + 1}`}
-                    className="h-44 w-auto flex-shrink-0 rounded-md border border-border bg-surface-2 object-cover"
+                    onClick={() => setLightboxIndex(i)}
+                    className="h-44 w-auto flex-shrink-0 cursor-zoom-in rounded-md border border-border bg-surface-2 object-cover transition-opacity hover:opacity-80"
                   />
                 ))}
               </div>
@@ -508,6 +524,56 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
           )}
         </aside>
       </div>
+
+      {lightboxIndex !== null && item.renderedPaths && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setLightboxIndex(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxIndex((i) => (i === null ? null : (i - 1 + previewCount) % previewCount));
+            }}
+            className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 px-4 py-3 text-white hover:bg-white/20"
+            aria-label="Précédent"
+          >
+            ‹
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/carousels/${carouselId}/preview/${lightboxIndex + 1}`}
+            alt={`Slide ${lightboxIndex + 1}`}
+            className="max-h-full max-w-full rounded-md object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxIndex((i) => (i === null ? null : (i + 1) % previewCount));
+            }}
+            className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/10 px-4 py-3 text-white hover:bg-white/20"
+            aria-label="Suivant"
+          >
+            ›
+          </button>
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs text-white">
+            {lightboxIndex + 1} / {previewCount} · ← → pour naviguer · Échap pour fermer
+          </div>
+          <button
+            type="button"
+            onClick={() => setLightboxIndex(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/10 px-3 py-1 text-white hover:bg-white/20"
+            aria-label="Fermer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
