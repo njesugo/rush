@@ -1,0 +1,45 @@
+# Deps
+node_modules
+.pnpm-store
+
+# Next.js
+.next
+out
+next-env.d.ts
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+
+# Data (user uploads / image bank)
+data/
+
+!.vscode/extensions.json
+.idea
+
+# Local data
+/data
+/bank
+*.sqlite
+*.sqlite-journal
+
+# Drizzle
+/drizzle/.snapshots

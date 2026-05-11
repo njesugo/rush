@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Surfaces */
+    --background: 60 6% 98%;        /* #fafaf9 */
+    --surface: 0 0% 100%;           /* #ffffff */
+    --surface-2: 60 4% 96%;         /* #f4f4f3 */
+
+    /* Borders */
+    --border: 60 4% 91%;            /* #e8e8e6 */
+    --border-strong: 60 3% 83%;     /* #d4d4d1 */
+    --border-hover: 240 1% 16%;     /* #282829 */
+
+    /* Text */
+    --text: 240 1% 16%;             /* #282829 */
+    --text-body: 240 2% 25%;        /* #3f3f42 */
+    --text-muted: 240 2% 43%;       /* #6b6b70 */
+    --text-subtle: 240 3% 62%;      /* #9a9a9f */
+
+    /* Accent (charcoal noir, ton ask) */
+    --accent: 240 1% 16%;           /* #282829 */
+    --accent-hover: 240 2% 11%;     /* #1a1a1b */
+    --accent-fg: 0 0% 100%;
+
+    /* States */
+    --success: 142 71% 30%;         /* #15803d */
+    --warning: 35 92% 33%;          /* #a16207 */
+    --danger: 0 75% 42%;            /* #b91c1c */
+    --info: 224 76% 40%;            /* #1d4ed8 */
+
+    --ring: 240 1% 16%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html, body {
+    @apply bg-background text-text antialiased;
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  ::selection {
+    background: hsl(var(--accent) / 0.15);
+  }
+
+  /* Focus */
+  :focus-visible {
+    outline: 2px solid hsl(var(--accent) / 0.35);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  .skeleton {
+    @apply rounded-md;
+    background: linear-gradient(
+      90deg,
+      hsl(var(--surface-2)) 0%,
+      hsl(var(--border)) 50%,
+      hsl(var(--surface-2)) 100%
+    );
+    background-size: 800px 100%;
+    @apply animate-shimmer;
+  }
+
+  .card-hover {
+    @apply transition-[border-color,transform] duration-200 ease-smooth hover:border-border-hover hover:-translate-y-px;
+  }
+
+  .checker-bg {
+    background-image:
+      linear-gradient(45deg, #e5e5e3 25%, transparent 25%),
+      linear-gradient(-45deg, #e5e5e3 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #e5e5e3 75%),
+      linear-gradient(-45deg, transparent 75%, #e5e5e3 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    background-color: #fafaf9;
+  }
+}
+
+/* Scrollbar discrète */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border-strong));
+  border-radius: 8px;
+  border: 2px solid hsl(var(--background));
+}
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--text-subtle)); }

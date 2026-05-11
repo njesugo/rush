@@ -1,0 +1,25 @@
+{
+  "name": "rush",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @rush/web dev",
+    "dev:worker": "pnpm --filter @rush/worker dev",
+    "dev:all": "pnpm -r --parallel --filter @rush/web --filter @rush/worker dev",
+    "build": "pnpm --filter @rush/web build",
+    "start": "pnpm --filter @rush/web start",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @rush/db generate",
+    "db:migrate": "pnpm --filter @rush/db migrate",
+    "db:seed": "pnpm --filter @rush/db seed",
+    "db:studio": "pnpm --filter @rush/db studio"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
