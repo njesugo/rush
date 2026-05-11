@@ -426,10 +426,10 @@ wsl -- bash -lc '... && pnpm db:generate && pnpm db:migrate'
 2. [ ] Vérifier que `wsl -- bash -lc '... && pnpm dev'` démarre OK et que `http://localhost:3000` répond
 3. [x] **PHASE 2** : Docker compose Postgres+Redis, migrations, Auth.js (code prêt — voir §9)
 4. [x] **PHASE 3** : Worker BullMQ + pipeline images + page Banque + page File de tri + SSE
-5. [ ] **PHASE 4** : Pages News, Carousels, Pinterest, Jobs, Settings + services
-6. [ ] **PHASE 5** : Script migration depuis `one/data.db`
-7. [ ] **PHASE 6** : Bridge Cloudflare worker
-8. [ ] **PHASE 7** : Deploy Railway
+5. [x] **PHASE 4** : Pages News, Carousels, Pinterest, Jobs, Settings + services
+6. [x] **PHASE 5** : Script migration depuis `one/data.db`
+7. [x] **PHASE 6** : Bridge Cloudflare worker (code backend ; côté worker CF à câbler)
+8. [x] **PHASE 7** : Deploy Railway (Dockerfiles + railway.json prêts ; provisioning UI restant)
 
 ---
 
