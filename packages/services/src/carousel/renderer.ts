@@ -12,8 +12,6 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { eq, inArray } from "drizzle-orm";
-import satori from "satori";
-import { Resvg } from "@resvg/resvg-js";
 import {
   getDb,
   carousels,
@@ -372,7 +370,7 @@ export async function renderCarousel(args: RenderCarouselArgs): Promise<RenderCa
 
     // satori expects a React element; our plain-object tree is structurally compatible.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svg = await satori(tree as any, {
+    const svg = await (await import("satori")).default(tree as any, {
       width: dims.width,
       height: dims.height,
       fonts: [
@@ -380,6 +378,7 @@ export async function renderCarousel(args: RenderCarouselArgs): Promise<RenderCa
         { name: "Inter", data: fonts.bold, weight: 700, style: "normal" },
       ],
     });
+    const { Resvg } = await import("@resvg/resvg-js");
     const png = new Resvg(svg, { fitTo: { mode: "width", value: dims.width } }).render().asPng();
     const out = path.join(
       OUTPUT_DIR,

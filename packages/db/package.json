@@ -11,13 +11,15 @@
     "studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.36.3",
-    "postgres": "^3.4.5",
     "next-auth": "5.0.0-beta.25",
-    "bcryptjs": "^2.4.3"
+    "postgres": "^3.4.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.9.0",
     "drizzle-kit": "^0.28.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
