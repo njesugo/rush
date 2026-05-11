@@ -39,15 +39,18 @@ let _fontCache: { regular: ArrayBuffer; bold: ArrayBuffer } | null = null;
 
 async function loadFonts(): Promise<{ regular: ArrayBuffer; bold: ArrayBuffer }> {
   if (_fontCache) return _fontCache;
-  // Inter via Google Fonts static distribution
+  // Static Inter weights from @fontsource (variable Inter is not parsable by satori)
+  const REG_URL = "https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.16/files/inter-latin-400-normal.woff";
+  const BOLD_URL = "https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.16/files/inter-latin-700-normal.woff";
   const [reg, bold] = await Promise.all([
-    fetch("https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf").then((r) =>
-      r.arrayBuffer()
-    ),
-    // Same variable font carries bold weights — reuse
-    fetch("https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf").then((r) =>
-      r.arrayBuffer()
-    ),
+    fetch(REG_URL).then((r) => {
+      if (!r.ok) throw new Error(`font fetch failed: ${REG_URL} -> ${r.status}`);
+      return r.arrayBuffer();
+    }),
+    fetch(BOLD_URL).then((r) => {
+      if (!r.ok) throw new Error(`font fetch failed: ${BOLD_URL} -> ${r.status}`);
+      return r.arrayBuffer();
+    }),
   ]);
   _fontCache = { regular: reg, bold };
   return _fontCache;
