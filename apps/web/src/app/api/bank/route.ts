@@ -25,6 +25,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const filter = (filterParam in FILTER_MAP ? filterParam : "available") as FilterKey;
   const sort = url.searchParams.get("sort") === "popular" ? "popular" : "recent";
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "200", 10) || 200, 500);
+  const offset = Math.max(parseInt(url.searchParams.get("offset") ?? "0", 10) || 0, 0);
 
   const db = getDb();
   const statuses = FILTER_MAP[filter];
@@ -47,7 +48,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         : sql`true`
     )
     .orderBy(sort === "recent" ? desc(images.createdAt) : desc(images.id))
-    .limit(limit);
+    .limit(limit)
+    .offset(offset);
 
-  return NextResponse.json({ items: rows });
+  return NextResponse.json({ items: rows, nextOffset: offset + rows.length, hasMore: rows.length === limit });
 }

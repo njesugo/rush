@@ -9,8 +9,8 @@ import {
 import { logger } from "./logger";
 
 async function handle(job: Job<CarouselRenderJobData>): Promise<{ carouselId: number; count: number }> {
-  const { carouselId, format } = job.data;
-  logger.info({ jobId: job.id, carouselId, format }, "carousel-render start");
+  const { carouselId, format, onlySlideNumbers } = job.data;
+  logger.info({ jobId: job.id, carouselId, format, onlySlideNumbers }, "carousel-render start");
   await publishJobEvent({
     type: "started",
     queue: QUEUE_NAMES.carouselRender,
@@ -23,6 +23,7 @@ async function handle(job: Job<CarouselRenderJobData>): Promise<{ carouselId: nu
   const result = await renderCarousel({
     carouselId,
     format,
+    onlySlideNumbers,
     onProgress: (pct) => {
       void job.updateProgress(pct);
     },

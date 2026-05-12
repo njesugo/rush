@@ -52,6 +52,8 @@ export interface PinterestSyncJobData {
 export interface CarouselRenderJobData {
   carouselId: number;
   format?: "1:1" | "4:5";
+  /** Si fourni, seules ces slides sont (re)rendues ; les autres conservent leur PNG existant. */
+  onlySlideNumbers?: number[];
 }
 
 export interface CarouselPublishJobData {

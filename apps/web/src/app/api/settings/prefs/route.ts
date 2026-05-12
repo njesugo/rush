@@ -13,6 +13,7 @@ const schema = z.object({
   newsScrapeSchedule: z.string().trim().optional(),
   defaultCarouselCount: z.number().int().min(1).max(20).optional(),
   autoEnqueueBgRemoval: z.boolean().optional(),
+  carouselOutroTemplate: z.string().max(2000).optional(),
 });
 
 export async function GET(): Promise<NextResponse> {

@@ -109,6 +109,7 @@ export interface Slide {
   type: "hook" | "content" | "outro";
   title: string;
   body: string | null;
+  highlight?: string | null;
 }
 
 export interface Money {
@@ -283,9 +284,16 @@ INTERDICTIONS ABSOLUES :
 - Aucune généralité type "l'IA va tout changer".
 
 STRUCTURE :
-- Slide 1 (HOOK) : titre uniquement, max 8 mots, body = null. Crée une tension.
-- Slides 2 à ${lastIdx - 1} (CONTENU) : titre court (3-7 mots) + body 1-4 phrases.
-- Slide ${lastIdx} : CONCLUSION forte. Pas d'ouverture, pas de conseil.
+- Slide 1 (HOOK) : titre uniquement, max 8 mots, body = null, highlight = null. Crée une tension.
+- Slides 2 à ${lastIdx - 1} (CONTENU) : titre court (3-7 mots) + body 1-4 phrases + highlight (voir ci-dessous).
+- Slide ${lastIdx} (CONCLUSION) : titre court + body 1-4 phrases + highlight. Conclusion forte, pas d'ouverture, pas de conseil.
+
+HIGHLIGHT (slides 2 à ${lastIdx} uniquement, OBLIGATOIRE) :
+- Choisis UNE PHRASE COMPLÈTE du body (de majuscule jusqu'au point final inclus) qui constitue l'idée centrale ou le chiffre le plus marquant de la slide.
+- highlight doit être un EXTRAIT TEXTUEL EXACT du body : copie-colle mot pour mot une phrase entière du body.
+- Pas de paraphrase, pas de troncature au milieu d'une phrase, pas d'ajout de mots.
+- Si le body ne contient qu'une seule phrase, highlight = cette phrase entière.
+- Pour le hook (slide 1) uniquement : highlight = null.
 
 QUALITÉ :
 - Chiffres, noms propres, dates précises tirés de l'article.
@@ -296,9 +304,9 @@ Ton : analyste froid et précis.
 
 Réponds en JSON uniquement, EXACTEMENT ${slideCount} slides :
 [
-  {"slide_number": 1, "type": "hook", "title": "...", "body": null},
-  {"slide_number": 2, "type": "content", "title": "...", "body": "..."},
-  {"slide_number": ${lastIdx}, "type": "content", "title": "...", "body": "..."}
+  {"slide_number": 1, "type": "hook", "title": "...", "body": null, "highlight": null},
+  {"slide_number": 2, "type": "content", "title": "...", "body": "...", "highlight": "extrait du body"},
+  {"slide_number": ${lastIdx}, "type": "content", "title": "...", "body": "...", "highlight": "extrait du body"}
 ]`;
 
   const { parsed, usage } = await callClaude<Slide[]>({

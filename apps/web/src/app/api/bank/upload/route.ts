@@ -20,7 +20,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   if (files.length === 0) return NextResponse.json({ error: "no files" }, { status: 400 });
 
-  const results: Array<{ filename: string; status: string; imageId?: number; error?: string }> = [];
+  const results: Array<{
+    filename: string;
+    status: string;
+    imageId?: number;
+    storageKey?: string;
+    error?: string;
+  }> = [];
   for (const f of files) {
     if (!(f instanceof File)) {
       results.push({ filename: "?", status: "error", error: "not a file" });
@@ -33,7 +39,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       const buf = Buffer.from(await f.arrayBuffer());
       const res = await ingestUpload({ filename: f.name, buffer: buf, source });
-      results.push({ filename: f.name, status: res.status, imageId: res.imageId });
+      results.push({
+        filename: f.name,
+        status: res.status,
+        imageId: res.imageId,
+        storageKey: res.storageKey,
+      });
     } catch (err) {
       results.push({
         filename: f.name,
