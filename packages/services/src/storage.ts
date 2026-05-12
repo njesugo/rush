@@ -14,6 +14,9 @@
 
 import path from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+// Node 20 (alpine) has no native WebSocket — supabase-js realtime requires one
+// even when we only use Storage. Provide a polyfill via the `ws` package.
+import WebSocket from "ws";
 
 export const BANK_BUCKET = process.env.BANK_BUCKET || "bank";
 
@@ -35,6 +38,7 @@ export function getStorage(): SupabaseClient {
   if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
   _client = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    realtime: { transport: WebSocket as unknown as never },
   });
   return _client;
 }
