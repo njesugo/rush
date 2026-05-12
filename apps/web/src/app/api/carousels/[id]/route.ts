@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
-import { getDb, carousels, type CarouselSlide, type CarouselAngle } from "@rush/db";
+import { getDb, carousels, newsItems, type CarouselSlide, type CarouselAngle } from "@rush/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +26,26 @@ export async function GET(
     .where(eq(carousels.id, carouselId))
     .limit(1);
   if (!rows.length) return NextResponse.json({ error: "not found" }, { status: 404 });
-  return NextResponse.json({ item: rows[0] });
+
+  const item = rows[0]!;
+  const ids = (item.sourceNewsIds ?? []).filter((n) => Number.isFinite(n));
+  let sources: Array<{ id: number; title: string; url: string; source: string }> = [];
+  if (ids.length) {
+    const news = await db
+      .select({
+        id: newsItems.id,
+        title: newsItems.title,
+        url: newsItems.url,
+        source: newsItems.source,
+      })
+      .from(newsItems)
+      .where(inArray(newsItems.id, ids));
+    // preserve sourceNewsIds order
+    const byId = new Map(news.map((n) => [n.id, n]));
+    sources = ids.map((nid) => byId.get(nid)).filter(Boolean) as typeof sources;
+  }
+
+  return NextResponse.json({ item, sources });
 }
 
 export async function PUT(

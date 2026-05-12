@@ -47,6 +47,9 @@ interface CarouselDetail {
 export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
   const router = useRouter();
   const [item, setItem] = React.useState<CarouselDetail | null>(null);
+  const [sources, setSources] = React.useState<
+    Array<{ id: number; title: string; url: string; source: string }>
+  >([]);
   const [loading, setLoading] = React.useState(true);
   const [caption, setCaption] = React.useState("");
   const [slides, setSlides] = React.useState<Slide[]>([]);
@@ -81,8 +84,12 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
       setLoading(false);
       return;
     }
-    const json = (await res.json()) as { item: CarouselDetail };
+    const json = (await res.json()) as {
+      item: CarouselDetail;
+      sources?: Array<{ id: number; title: string; url: string; source: string }>;
+    };
     setItem(json.item);
+    setSources(json.sources ?? []);
     setCaption(json.item.caption || "");
     setSlides(json.item.slides || []);
     setDirty(false);
@@ -560,12 +567,39 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
               <h2 className="text-sm font-medium uppercase tracking-wide text-text-muted">
                 Source
               </h2>
-              <Link
-                href={`/news?focus=${item.sourceNewsIds[0]}`}
-                className="mt-2 inline-block text-xs text-accent hover:underline"
-              >
-                News #{item.sourceNewsIds[0]}
-              </Link>
+              <div className="mt-2 space-y-1.5">
+                {sources.length > 0 ? (
+                  sources.map((s) => (
+                    <div key={s.id} className="text-xs">
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-accent hover:underline"
+                        title={s.url}
+                      >
+                        {s.title}
+                      </a>
+                      <div className="text-[11px] text-text-muted">
+                        {s.source} ·{" "}
+                        <Link
+                          href={`/news?focus=${s.id}`}
+                          className="hover:underline"
+                        >
+                          News #{s.id}
+                        </Link>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <Link
+                    href={`/news?focus=${item.sourceNewsIds[0]}`}
+                    className="inline-block text-xs text-accent hover:underline"
+                  >
+                    News #{item.sourceNewsIds[0]}
+                  </Link>
+                )}
+              </div>
             </section>
           )}
         </aside>
