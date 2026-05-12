@@ -23,6 +23,7 @@ interface AppPrefs {
   newsScrapeSchedule: string;
   defaultCarouselCount: number;
   autoEnqueueBgRemoval: boolean;
+  carouselOutroTemplate: string;
 }
 
 interface SettingsApi {
@@ -421,6 +422,20 @@ function PrefsTab({ prefs, onSaved }: { prefs: AppPrefs; onSaved: () => void }) 
           />
           <span className="text-text">Lancer automatiquement le détourage à l&apos;ingestion</span>
         </label>
+        <div className="mt-4">
+          <Field label="Outro des carrousels">
+            <textarea
+              value={form.carouselOutroTemplate}
+              onChange={(e) => setForm({ ...form, carouselOutroTemplate: e.target.value })}
+              rows={4}
+              className="w-full rounded-md border border-border bg-surface px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+              placeholder="Chaque jour, je **décrypte l'IA et ses applications**. L'essentiel en 5 min.\n**Follow** pour ne rien manquer."
+            />
+            <p className="mt-1 text-[11px] text-text-muted">
+              Texte affiché sur la dernière slide. Entoure les mots de **étoiles** pour les mettre en gras italique. Les sauts de ligne sont préservés.
+            </p>
+          </Field>
+        </div>
       </Card>
 
       <Card title="Plannings (cron)" subtitle="Format cron — ex. */5 * * * * (toutes les 5 min)">

@@ -71,6 +71,11 @@ export type AppPrefs = {
   newsScrapeSchedule: string;
   defaultCarouselCount: number;
   autoEnqueueBgRemoval: boolean;
+  /**
+   * Texte de la slide outro. Les portions à mettre en gras italique sont marquées
+   * avec `**...**` (style markdown). Les sauts de ligne `\n` sont préservés.
+   */
+  carouselOutroTemplate: string;
 };
 
 export const DEFAULT_PREFS: AppPrefs = {
@@ -80,6 +85,8 @@ export const DEFAULT_PREFS: AppPrefs = {
   newsScrapeSchedule: process.env.CRON_NEWS_SCHEDULE || "",
   defaultCarouselCount: 3,
   autoEnqueueBgRemoval: true,
+  carouselOutroTemplate:
+    "Chaque jour, je **décrypte l'IA et ses applications**. L'essentiel en 5 min.\n**Follow** pour ne rien manquer.",
 };
 
 export const PREFS_KEY = "app:prefs";

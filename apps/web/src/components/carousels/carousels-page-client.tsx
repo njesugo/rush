@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Loader2, Trash2, FileText, AlertCircle, Check } from "lucide-react";
+import { Loader2, Trash2, FileText, AlertCircle, Check, RefreshCw, Search, X } from "lucide-react";
 import { useJobsStream } from "@/lib/use-jobs-stream";
 import { cn } from "@/lib/utils";
 
@@ -38,9 +38,21 @@ const STATUS_CLASS: Record<CarouselListItem["status"], string> = {
   failed: "bg-red-500/10 text-red-600",
 };
 
+const STATUS_FILTERS = [
+  { key: "all", label: "Tous" },
+  { key: "draft", label: "Brouillons" },
+  { key: "ready", label: "Prêts" },
+  { key: "scheduled", label: "Planifiés" },
+  { key: "published", label: "Publiés" },
+  { key: "failed", label: "Échoués" },
+] as const;
+type StatusFilter = (typeof STATUS_FILTERS)[number]["key"];
+
 export function CarouselsPageClient() {
   const [items, setItems] = React.useState<CarouselListItem[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
+  const [search, setSearch] = React.useState("");
 
   const fetchItems = React.useCallback(async () => {
     try {
@@ -81,34 +93,124 @@ export function CarouselsPageClient() {
     setItems((prev) => prev.filter((c) => c.id !== id));
   }
 
+  const counts = React.useMemo(() => {
+    const c: Record<string, number> = { all: items.length, draft: 0, ready: 0, scheduled: 0, published: 0, failed: 0 };
+    for (const it of items) c[it.status] = (c[it.status] ?? 0) + 1;
+    return c;
+  }, [items]);
+
+  const filteredItems = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter((it) => {
+      if (statusFilter !== "all" && it.status !== statusFilter) return false;
+      if (!q) return true;
+      const hookSlide = it.slides?.find((s) => s.type === "hook") || it.slides?.[0];
+      const hay = [
+        it.title,
+        hookSlide?.title,
+        it.angle?.angle_title,
+        it.angle?.angle_type,
+        it.caption,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [items, statusFilter, search]);
+
   return (
     <div className="space-y-6">
       <header className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Carousels</h1>
           <p className="mt-1 text-sm text-text-muted">
-            {items.length} carousel{items.length > 1 ? "s" : ""}
+            {filteredItems.length}
+            {filteredItems.length !== items.length && ` / ${items.length}`} carousel
+            {items.length > 1 ? "s" : ""}
             {loading && " · chargement…"}
           </p>
         </div>
-        <Link
-          href="/news"
-          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-surface-2"
-        >
-          <FileText className="h-4 w-4" strokeWidth={1.5} />
-          Générer depuis une news
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void fetchItems()}
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm hover:border-border-hover hover:bg-surface-2"
+          >
+            <RefreshCw className="h-4 w-4" strokeWidth={1.5} />
+            Rafraîchir
+          </button>
+          <Link
+            href="/news"
+            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-surface-2"
+          >
+            <FileText className="h-4 w-4" strokeWidth={1.5} />
+            Générer depuis une news
+          </Link>
+        </div>
       </header>
 
-      {!loading && items.length === 0 ? (
+      {/* Toolbar : filtres statut + recherche */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+        <div className="flex flex-wrap gap-1">
+          {STATUS_FILTERS.map((f) => {
+            const n = counts[f.key] ?? 0;
+            const active = statusFilter === f.key;
+            return (
+              <button
+                key={f.key}
+                onClick={() => setStatusFilter(f.key)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
+                  active ? "bg-accent text-accent-fg" : "text-text-muted hover:bg-surface-2"
+                )}
+              >
+                <span>{f.label}</span>
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 font-mono text-[10px]",
+                    active ? "bg-accent-fg/15 text-accent-fg" : "bg-text-muted/15 text-text-muted"
+                  )}
+                >
+                  {n}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" strokeWidth={1.5} />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher hook, angle, caption…"
+            className="w-72 rounded-md border border-border bg-surface py-1.5 pl-8 pr-8 text-sm placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-text-muted hover:bg-surface-2 hover:text-text"
+              title="Effacer"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!loading && filteredItems.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
-          <p className="text-sm text-text-muted">
-            Aucun carousel pour le moment. Va sur <Link href="/news" className="underline">/news</Link> pour en générer un.
-          </p>
+          {items.length === 0 ? (
+            <p className="text-sm text-text-muted">
+              Aucun carousel pour le moment. Va sur <Link href="/news" className="underline">/news</Link> pour en générer un.
+            </p>
+          ) : (
+            <p className="text-sm text-text-muted">Aucun carousel pour ce filtre.</p>
+          )}
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {items.map((c) => (
+          {filteredItems.map((c) => (
             <CarouselCard key={c.id} item={c} onDelete={() => void handleDelete(c.id)} />
           ))}
         </div>

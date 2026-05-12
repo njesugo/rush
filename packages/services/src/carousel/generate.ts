@@ -13,6 +13,7 @@ import {
   type Angle,
   type Money,
 } from "./claude";
+import { getPrefs } from "../settings";
 
 export interface GenerateCarouselResult {
   carouselId: number;
@@ -66,12 +67,24 @@ export async function generateCarouselForNews(args: {
   // 4) Caption
   const { caption } = await generateCaption({ slides, angle: chosen });
 
-  // 5) Persist
+  // 5) Ajoute systématiquement la slide outro (CTA Suis pour plus)
+  const prefs = await getPrefs();
+  const slidesWithOutro: CarouselSlide[] = [
+    ...(slides as CarouselSlide[]),
+    {
+      slide_number: slides.length + 1,
+      type: "outro",
+      title: "Suis pour plus",
+      body: prefs.carouselOutroTemplate,
+    } as CarouselSlide,
+  ];
+
+  // 6) Persist
   await db
     .update(carousels)
     .set({
       title: chosen.angle_title,
-      slides: slides as CarouselSlide[],
+      slides: slidesWithOutro,
       caption,
       angle: chosen as CarouselAngle,
       candidateAngles: angles as CarouselAngle[],
@@ -83,7 +96,7 @@ export async function generateCarouselForNews(args: {
 
   return {
     carouselId,
-    slides: slides as CarouselSlide[],
+    slides: slidesWithOutro,
     caption,
     angle: chosen as CarouselAngle,
     candidateAngles: angles as CarouselAngle[],

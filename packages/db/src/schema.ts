@@ -110,6 +110,10 @@ export interface CarouselSlide {
   type: "hook" | "content" | "outro";
   title: string;
   body: string | null;
+  /** Phrase clé résumant l'idée de la slide (surlignée en bleu, gras italique). Pour les slides de type "content" uniquement. */
+  highlight?: string | null;
+  /** storageKey (chemin relatif dans BANK_DIR) de l'image fixée sur cette slide. Si null/absent, une image aléatoire est tirée au rendu. */
+  imageStorageKey?: string | null;
 }
 
 export interface CarouselAngle {

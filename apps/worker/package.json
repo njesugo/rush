@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "CHOKIDAR_USEPOLLING=true CHOKIDAR_INTERVAL=300 tsx watch --include 'src/**/*' --include '../../packages/**/src/**/*' src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit"
   },
