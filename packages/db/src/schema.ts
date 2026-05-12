@@ -179,6 +179,10 @@ export const newsItems = pgTable(
     editorialScore: real("editorial_score").default(0).notNull(),
     finalScore: real("final_score").default(0).notNull(),
     money: text("money"), // formatted "600 M€"
+    content: text("content"), // full article body (v2 scraper, on-demand)
+    contentStatus: text("content_status"), // 'ok' | 'failed' | 'paywall'
+    contentScrapedAt: timestamp("content_scraped_at"),
+    contentChars: integer("content_chars"),
   },
   (t) => ({
     urlUnique: uniqueIndex("news_url_unique").on(t.url),

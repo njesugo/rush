@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Save, RefreshCw, Trash2, AlertCircle, ImageIcon, Send, Calendar, ExternalLink, Shuffle, Images } from "lucide-react";
+import { ArrowLeft, Loader2, Save, RefreshCw, Trash2, AlertCircle, ImageIcon, Send, Calendar, ExternalLink, Shuffle, Images, FileText } from "lucide-react";
 import { useJobsStream } from "@/lib/use-jobs-stream";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +62,14 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
   const [renderFormat, setRenderFormat] = React.useState<"1:1" | "4:5">("4:5");
   const [lightboxIndex, setLightboxIndex] = React.useState<number | null>(null);
   const [pickerSlide, setPickerSlide] = React.useState<number | null>(null);
+  const [contentModal, setContentModal] = React.useState<{
+    newsId: number;
+    title: string;
+    url: string;
+    content: string | null;
+    loading: boolean;
+    error: string | null;
+  } | null>(null);
 
   const previewCount = item?.renderedPaths?.length ?? 0;
   React.useEffect(() => {
@@ -76,6 +84,60 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [lightboxIndex, previewCount]);
+
+  const openContentModal = React.useCallback(
+    async (s: { id: number; title: string; url: string }, force = false) => {
+      setContentModal({
+        newsId: s.id,
+        title: s.title,
+        url: s.url,
+        content: null,
+        loading: true,
+        error: null,
+      });
+      try {
+        // 1. Try cached GET first (instant) unless forced refresh.
+        if (!force) {
+          const cached = await fetch(`/api/news/${s.id}/fetch-content`);
+          if (cached.ok) {
+            const j = (await cached.json()) as {
+              content: string | null;
+              contentStatus: string | null;
+              summary: string | null;
+            };
+            if (j.content && j.contentStatus === "ok") {
+              setContentModal((prev) =>
+                prev && prev.newsId === s.id
+                  ? { ...prev, content: j.content, loading: false }
+                  : prev
+              );
+              return;
+            }
+          }
+        }
+        // 2. Fetch via Tavily extract.
+        const res = await fetch(
+          `/api/news/${s.id}/fetch-content${force ? "?force=1" : ""}`,
+          { method: "POST" }
+        );
+        const j = (await res.json()) as { content?: string; error?: string };
+        if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+        setContentModal((prev) =>
+          prev && prev.newsId === s.id
+            ? { ...prev, content: j.content || "", loading: false }
+            : prev
+        );
+      } catch (err) {
+        const msg = (err as Error).message || "échec";
+        setContentModal((prev) =>
+          prev && prev.newsId === s.id
+            ? { ...prev, error: msg, loading: false }
+            : prev
+        );
+      }
+    },
+    []
+  );
 
   const fetchItem = React.useCallback(async () => {
     const res = await fetch(`/api/carousels/${carouselId}`);
@@ -580,14 +642,25 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
                       >
                         {s.title}
                       </a>
-                      <div className="text-[11px] text-text-muted">
-                        {s.source} ·{" "}
+                      <div className="text-[11px] text-text-muted flex items-center gap-2 flex-wrap">
+                        <span>{s.source}</span>
+                        <span>·</span>
                         <Link
                           href={`/news?focus=${s.id}`}
                           className="hover:underline"
                         >
                           News #{s.id}
                         </Link>
+                        <span>·</span>
+                        <button
+                          type="button"
+                          onClick={() => openContentModal(s)}
+                          className="inline-flex items-center gap-1 hover:text-accent hover:underline"
+                          title="Récupérer le contenu complet via Tavily"
+                        >
+                          <FileText className="h-3 w-3" />
+                          Contenu complet
+                        </button>
                       </div>
                     </div>
                   ))
@@ -680,6 +753,95 @@ export function CarouselDetailClient({ carouselId }: { carouselId: number }) {
           >
             ✕
           </button>
+        </div>
+      )}
+
+      {contentModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setContentModal(null)}
+        >
+          <div
+            className="relative flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-bg-elevated shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate text-sm font-medium text-text">
+                  {contentModal.title}
+                </h3>
+                <a
+                  href={contentModal.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-0.5 block truncate text-xs text-accent hover:underline"
+                  title={contentModal.url}
+                >
+                  {contentModal.url}
+                </a>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    openContentModal(
+                      {
+                        id: contentModal.newsId,
+                        title: contentModal.title,
+                        url: contentModal.url,
+                      },
+                      true
+                    )
+                  }
+                  disabled={contentModal.loading}
+                  className="rounded p-1.5 text-text-muted hover:bg-bg-subtle hover:text-text disabled:opacity-50"
+                  title="Re-scraper (force)"
+                >
+                  <RefreshCw
+                    className={cn(
+                      "h-4 w-4",
+                      contentModal.loading && "animate-spin"
+                    )}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setContentModal(null)}
+                  className="rounded p-1.5 text-text-muted hover:bg-bg-subtle hover:text-text"
+                  aria-label="Fermer"
+                >
+                  ✕
+                </button>
+              </div>
+            </header>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {contentModal.loading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-text-muted">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Extraction en cours…</span>
+                </div>
+              ) : contentModal.error ? (
+                <div className="flex items-start gap-2 rounded border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <div>
+                    <div className="font-medium">Échec de l&apos;extraction</div>
+                    <div className="mt-1 text-xs opacity-80">{contentModal.error}</div>
+                  </div>
+                </div>
+              ) : contentModal.content ? (
+                <article className="prose prose-sm prose-invert max-w-none whitespace-pre-wrap text-sm leading-relaxed text-text">
+                  {contentModal.content}
+                </article>
+              ) : (
+                <p className="py-12 text-center text-sm text-text-muted">Vide.</p>
+              )}
+            </div>
+            {contentModal.content && !contentModal.loading && (
+              <footer className="border-t border-border px-5 py-2 text-xs text-text-muted">
+                {contentModal.content.length.toLocaleString()} caractères
+              </footer>
+            )}
+          </div>
         </div>
       )}
     </div>
