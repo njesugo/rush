@@ -12,6 +12,7 @@ import {
   Filter as FilterIcon,
   X,
   Sparkles,
+  Search,
 } from "lucide-react";
 import { useJobsStream } from "@/lib/use-jobs-stream";
 import { useRouter } from "next/navigation";
@@ -50,6 +51,12 @@ export function NewsPageClient() {
   const [loading, setLoading] = React.useState(true);
   const [scraping, setScraping] = React.useState(false);
   const [opened, setOpened] = React.useState<NewsItem | null>(null);
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [searchTimeRange, setSearchTimeRange] = React.useState<"day" | "week" | "month" | "year">("week");
+  const [searchFilterAI, setSearchFilterAI] = React.useState(false);
+  const [searching, setSearching] = React.useState(false);
+  const [searchResults, setSearchResults] = React.useState<NewsItem[] | null>(null);
+  const [activeSearchLabel, setActiveSearchLabel] = React.useState<string>("");
 
   const fetchItems = React.useCallback(async () => {
     try {
@@ -107,6 +114,49 @@ export function NewsPageClient() {
     }
   }
 
+  async function triggerSearch() {
+    const q = searchQuery.trim();
+    if (!q) {
+      toast.error("Saisis un mot-clé ou une phrase");
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await fetch("/api/news/search", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          query: q,
+          timeRange: searchTimeRange,
+          filterAI: searchFilterAI,
+          maxResults: 15,
+        }),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        inserted?: number;
+        fetched?: number;
+        total?: number;
+        items?: NewsItem[];
+        error?: string;
+      };
+      if (!res.ok || !json.ok) {
+        toast.error(json.error || "Recherche échouée");
+        return;
+      }
+      const found = Array.isArray(json.items) ? json.items : [];
+      setSearchResults(found);
+      setActiveSearchLabel(q);
+      toast.success(
+        `Recherche « ${q} » : ${found.length} résultat${found.length > 1 ? "s" : ""} (${json.inserted ?? 0} nouveau${(json.inserted ?? 0) > 1 ? "x" : ""})`
+      );
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSearching(false);
+    }
+  }
+
   async function markUsed(item: NewsItem) {
     const res = await fetch(`/api/news/${item.id}/use`, { method: "POST" });
     if (!res.ok) {
@@ -115,6 +165,11 @@ export function NewsPageClient() {
     }
     setItems((prev) =>
       prev.map((it) => (it.id === item.id ? { ...it, used: it.used + 1 } : it))
+    );
+    setSearchResults((prev) =>
+      prev
+        ? prev.map((it) => (it.id === item.id ? { ...it, used: it.used + 1 } : it))
+        : prev
     );
   }
 
@@ -152,7 +207,9 @@ export function NewsPageClient() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Actualités IA</h1>
           <p className="mt-1 text-sm text-text-muted">
-            {items.length} article{items.length > 1 ? "s" : ""}
+            {searchResults
+              ? `${searchResults.length} résultat${searchResults.length > 1 ? "s" : ""} pour « ${activeSearchLabel} »`
+              : `${items.length} article${items.length > 1 ? "s" : ""}`}
             {loading && " · chargement…"}
           </p>
         </div>
@@ -172,6 +229,94 @@ export function NewsPageClient() {
           {scraping ? "Scrape en cours…" : "Scraper maintenant"}
         </button>
       </header>
+
+      {/* Recherche Tavily à la demande */}
+      <div className="rounded-lg border border-border bg-surface p-3">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void triggerSearch();
+          }}
+          className="flex flex-wrap items-center gap-2"
+        >
+          <div className="relative flex-1 min-w-[260px]">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted"
+              strokeWidth={1.5}
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Rechercher des news (Tavily) — ex: Mistral nouveau modèle, OpenAI agents…"
+              className="w-full rounded-md border border-border bg-bg py-2 pl-8 pr-8 text-sm placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
+              disabled={searching}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-text-muted hover:bg-surface-2 hover:text-text"
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+              </button>
+            )}
+          </div>
+          <select
+            value={searchTimeRange}
+            onChange={(e) => setSearchTimeRange(e.target.value as "day" | "week" | "month" | "year")}
+            disabled={searching}
+            className="rounded-md border border-border bg-bg px-2 py-2 text-xs text-text focus:border-accent focus:outline-none"
+          >
+            <option value="day">24h</option>
+            <option value="week">7 jours</option>
+            <option value="month">1 mois</option>
+            <option value="year">1 an</option>
+          </select>
+          <label className="inline-flex items-center gap-1.5 rounded-md border border-border bg-bg px-2 py-2 text-xs text-text-muted">
+            <input
+              type="checkbox"
+              checked={searchFilterAI}
+              onChange={(e) => setSearchFilterAI(e.target.checked)}
+              disabled={searching}
+              className="h-3.5 w-3.5 accent-accent"
+            />
+            Filtre IA
+          </label>
+          <button
+            type="submit"
+            disabled={searching || !searchQuery.trim()}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              "border border-border bg-surface-2 hover:border-accent hover:text-text disabled:opacity-60"
+            )}
+          >
+            {searching ? (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+            ) : (
+              <Sparkles className="h-4 w-4" strokeWidth={1.5} />
+            )}
+            {searching ? "Recherche…" : "Rechercher"}
+          </button>
+        </form>
+        {searchResults && (
+          <div className="mt-2 flex items-center justify-between gap-2 rounded-md bg-surface-2 px-2.5 py-1.5 text-xs text-text-muted">
+            <span>
+              Mode recherche actif · {searchResults.length} résultat{searchResults.length > 1 ? "s" : ""} pour « <span className="text-text">{activeSearchLabel}</span> »
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchResults(null);
+                setActiveSearchLabel("");
+              }}
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-surface hover:text-text"
+            >
+              <X className="h-3 w-3" strokeWidth={1.5} /> Réinitialiser
+            </button>
+          </div>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -231,15 +376,17 @@ export function NewsPageClient() {
         </div>
       </div>
 
-      {!loading && items.length === 0 ? (
+      {!loading && (searchResults ? searchResults : items).length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
           <p className="text-sm text-text-muted">
-            Aucune news pour le moment. Cliquez « Scraper maintenant ».
+            {searchResults
+              ? `Aucun résultat pour « ${activeSearchLabel} ». Essaie une autre formulation ou décoche le filtre IA.`
+              : "Aucune news pour le moment. Cliquez « Scraper maintenant »."}
           </p>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {items.map((it) => (
+          {(searchResults ?? items).map((it) => (
             <NewsCard
               key={it.id}
               item={it}

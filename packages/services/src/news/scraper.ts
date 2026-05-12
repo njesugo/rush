@@ -4,6 +4,7 @@
  */
 
 import Parser from "rss-parser";
+import { inArray } from "drizzle-orm";
 import { getDb, newsItems } from "@rush/db";
 import { searchAINews } from "./searchService";
 import { geoScore, type Region } from "./geoScoring";
@@ -286,3 +287,189 @@ export async function scrapeNews(opts: ScrapeOptions = {}): Promise<ScrapeResult
 }
 
 export { RSS_FEEDS };
+
+/* ------------------------------------------------------------------ */
+/* Recherche Tavily à la demande (mot-clé / phrase)                   */
+/* ------------------------------------------------------------------ */
+
+export interface SearchAndIngestOptions {
+  query: string;
+  maxResults?: number;
+  timeRange?: "day" | "week" | "month" | "year";
+  searchDepth?: "basic" | "advanced";
+  /** Si false, n'applique pas le filtre IA (utile pour recherches non-IA). Défaut: false. */
+  filterAI?: boolean;
+  /** Tavily topic. "general" = plus large (noms propres, niches), "news" = actu récente. Défaut: "general". */
+  topic?: "news" | "general";
+}
+
+export interface SearchAndIngestResult {
+  inserted: number;
+  total: number;
+  fetched: number;
+  insertedIds: number[];
+  items: ScrapedItem[];
+  /** Lignes DB complètes pour toutes les URLs matchées (nouvelles + déjà existantes). */
+  dbItems: Array<{
+    id: number;
+    source: string;
+    title: string;
+    url: string;
+    summary: string | null;
+    fetchedAt: Date;
+    publishedAt: Date | null;
+    used: number;
+    region: string | null;
+    geoScore: number;
+    keywordScore: number;
+    editorialScore: number;
+    finalScore: number;
+    money: string | null;
+  }>;
+}
+
+/**
+ * Recherche Tavily libre (déclenchée par l'utilisateur depuis l'UI).
+ * Filtre IA optionnel, scoring + dédoublonnage par URL/titre, insertion en DB
+ * (onConflictDoNothing). Retourne les items insérés.
+ */
+export async function searchAndIngestNews(
+  opts: SearchAndIngestOptions
+): Promise<SearchAndIngestResult> {
+  const query = (opts.query || "").trim();
+  if (!query) throw new Error("query vide");
+  if (!process.env.TAVILY_API_KEY) throw new Error("TAVILY_API_KEY manquante");
+
+  // Pour les recherches utilisateur : topic='general' + search_depth='advanced'
+  // → résultats plus larges et pertinents (noms propres, niches, etc.).
+  // Filtre IA désactivé par défaut (l'utilisateur cherche un sujet précis).
+  const filterAI = opts.filterAI === true;
+  const topic = opts.topic ?? "general";
+
+  const results = await searchAINews({
+    query,
+    maxResults: Math.min(20, Math.max(1, opts.maxResults ?? 15)),
+    timeRange: opts.timeRange ?? "week",
+    searchDepth: opts.searchDepth ?? "advanced",
+    topic,
+  });
+
+  type RawItem = {
+    title: string;
+    url: string;
+    source: string;
+    summary: string;
+    publishedAt: Date | null;
+    score: number;
+  };
+
+  const filtered: RawItem[] = [];
+  for (const r of results) {
+    if (filterAI && !isAIRelated({ title: r.title, summary: r.summary })) continue;
+    const kw = scoreKeywords({ title: r.title, contentSnippet: r.summary });
+    filtered.push({
+      title: r.title,
+      url: r.url,
+      source: r.source,
+      summary: r.summary,
+      publishedAt: null,
+      score: r.score + kw,
+    });
+  }
+
+  // Dédoublonnage URL + titre
+  const seenUrls = new Set<string>();
+  const seenTitles = new Map<string, RawItem>();
+  const unique: RawItem[] = [];
+  for (const it of filtered) {
+    if (seenUrls.has(it.url)) continue;
+    seenUrls.add(it.url);
+    const key = titleKey(it.title);
+    if (key && seenTitles.has(key)) continue;
+    if (key) seenTitles.set(key, it);
+    unique.push(it);
+  }
+
+  // Scoring géo + éditorial
+  const enriched: ScrapedItem[] = unique.map((it) => {
+    const { score: gScore, region } = geoScore(it);
+    const ed = editorialScore({ title: it.title, summary: it.summary });
+    return {
+      title: it.title,
+      url: it.url,
+      source: it.source,
+      summary: it.summary,
+      publishedAt: it.publishedAt,
+      keywordScore: it.score,
+      geoScore: gScore,
+      region,
+      editorialScore: ed.score,
+      money: ed.money?.formatted || null,
+      finalScore: it.score + gScore + ed.score,
+    };
+  });
+
+  // Insert
+  const db = getDb();
+  const insertedIds: number[] = [];
+  for (const it of enriched) {
+    const r = await db
+      .insert(newsItems)
+      .values({
+        source: it.source,
+        title: it.title,
+        url: it.url,
+        summary: it.summary,
+        publishedAt: it.publishedAt ?? null,
+        region: it.region,
+        geoScore: it.geoScore,
+        keywordScore: it.keywordScore,
+        editorialScore: it.editorialScore,
+        finalScore: it.finalScore,
+        money: it.money,
+      })
+      .onConflictDoNothing({ target: newsItems.url })
+      .returning({ id: newsItems.id });
+    if (r.length > 0) insertedIds.push(r[0].id);
+  }
+
+  // Récupère les lignes DB pour TOUTES les URLs matchées (nouvelles + déjà présentes)
+  const matchedUrls = enriched.map((e) => e.url);
+  const dbItems = matchedUrls.length
+    ? await db
+        .select({
+          id: newsItems.id,
+          source: newsItems.source,
+          title: newsItems.title,
+          url: newsItems.url,
+          summary: newsItems.summary,
+          fetchedAt: newsItems.fetchedAt,
+          publishedAt: newsItems.publishedAt,
+          used: newsItems.used,
+          region: newsItems.region,
+          geoScore: newsItems.geoScore,
+          keywordScore: newsItems.keywordScore,
+          editorialScore: newsItems.editorialScore,
+          finalScore: newsItems.finalScore,
+          money: newsItems.money,
+        })
+        .from(newsItems)
+        .where(inArray(newsItems.url, matchedUrls))
+    : [];
+
+  // Conserve l'ordre par finalScore descendant (cohérent avec `items`)
+  const orderByUrl = new Map(enriched.map((e, i) => [e.url, i] as const));
+  dbItems.sort(
+    (a: { url: string }, b: { url: string }) =>
+      (orderByUrl.get(a.url) ?? 0) - (orderByUrl.get(b.url) ?? 0)
+  );
+
+  return {
+    inserted: insertedIds.length,
+    total: enriched.length,
+    fetched: results.length,
+    insertedIds,
+    items: enriched.sort((a, b) => b.finalScore - a.finalScore),
+    dbItems,
+  };
+}
