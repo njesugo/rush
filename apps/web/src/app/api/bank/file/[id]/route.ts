@@ -1,27 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "node:fs";
-import path from "node:path";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { getDb, images } from "@rush/db";
-import { resolveStorage, BANK_DIR } from "@rush/services";
+import { signedUrl } from "@rush/services";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function mimeFor(ext: string): string {
-  switch (ext.toLowerCase()) {
-    case ".png":
-      return "image/png";
-    case ".jpg":
-    case ".jpeg":
-      return "image/jpeg";
-    case ".webp":
-      return "image/webp";
-    default:
-      return "application/octet-stream";
-  }
-}
 
 export async function GET(
   _req: NextRequest,
@@ -40,24 +24,13 @@ export async function GET(
   const [row] = await db.select().from(images).where(eq(images.id, imageId)).limit(1);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const abs = resolveStorage(row.storageKey);
-  if (!abs.startsWith(BANK_DIR)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  try {
+    const url = await signedUrl(row.storageKey, 600);
+    return NextResponse.redirect(url, { status: 307 });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "signed url failed" },
+      { status: 404 }
+    );
   }
-  if (!fs.existsSync(abs)) {
-    return NextResponse.json({ error: "file missing" }, { status: 404 });
-  }
-
-  const stat = fs.statSync(abs);
-  const stream = fs.createReadStream(abs);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const body = stream as any;
-
-  return new Response(body, {
-    headers: {
-      "Content-Type": mimeFor(path.extname(abs)),
-      "Content-Length": String(stat.size),
-      "Cache-Control": "private, max-age=60",
-    },
-  });
 }

@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "node:fs/promises";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { getDb, images } from "@rush/db";
-import {
-  resolveStorage,
-  BANK_DIR,
-  publishJobEvent,
-  requeueBgRemoval,
-} from "@rush/services";
+import { deleteImage, publishJobEvent, requeueBgRemoval } from "@rush/services";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,17 +38,7 @@ export async function POST(
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   if (action === "delete") {
-    const abs = resolveStorage(row.storageKey);
-    if (abs.startsWith(BANK_DIR)) {
-      await fs.unlink(abs).catch(() => {});
-    }
-    await db.delete(images).where(eq(images.id, imageId));
-    await publishJobEvent({
-      type: "image:updated",
-      imageId,
-      status: "deleted",
-      at: Date.now(),
-    });
+    await deleteImage(imageId);
     return NextResponse.json({ ok: true, deleted: true });
   }
 
@@ -72,8 +56,7 @@ export async function POST(
     return NextResponse.json({ ok: true, status: "done" });
   }
 
-  // redo: locate the original raw, move it back to /raw and re-enqueue
-  // a bg-removal job so the worker re-detours it.
+  // redo: locate the original raw, move it back to raw/ and re-enqueue
   try {
     await requeueBgRemoval(imageId);
   } catch (err) {

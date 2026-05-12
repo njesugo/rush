@@ -1,5 +1,4 @@
 import "./loadEnv";
-import { ensureBankDirs } from "@rush/services";
 import { logger } from "./logger";
 import { startBgRemovalWorker } from "./bgRemovalWorker";
 import { startNewsScrapeWorker } from "./newsScrapeWorker";
@@ -11,8 +10,9 @@ import { startCarouselPublishWorker } from "./carouselPublishWorker";
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set");
   if (!process.env.REDIS_URL) throw new Error("REDIS_URL is not set");
+  if (!process.env.SUPABASE_URL) throw new Error("SUPABASE_URL is not set");
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
 
-  await ensureBankDirs();
   logger.info("Rush worker starting…");
 
   const workers = [

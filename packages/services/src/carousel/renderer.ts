@@ -9,8 +9,6 @@
  */
 
 import path from "node:path";
-import fs from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { eq, inArray } from "drizzle-orm";
 import {
   getDb,
@@ -18,7 +16,13 @@ import {
   images,
   type CarouselSlide,
 } from "@rush/db";
-import { OUTPUT_DIR, GENERIC_DIR, DONE_DIR, BANK_DIR } from "../paths";
+import {
+  PREFIX,
+  joinKey,
+  uploadObject,
+  downloadObject,
+  existsObject,
+} from "../storage";
 
 /* ----------------------- Constants ----------------------- */
 
@@ -60,18 +64,14 @@ async function loadFonts(): Promise<{ regular: ArrayBuffer; bold: ArrayBuffer }>
 
 async function pickBankImages(count: number): Promise<string[]> {
   const db = getDb();
-  // Pull `done` and `generic` filenames from DB
   const rows = await db
     .select({ filename: images.filename, status: images.status, storageKey: images.storageKey })
     .from(images)
     .where(inArray(images.status, ["done", "generic"]));
-  const usable = rows
-    .map((r) => path.join(BANK_DIR, r.storageKey))
-    .filter((p) => existsSync(p));
+  const usable = rows.map((r) => r.storageKey).filter(Boolean);
   if (!usable.length) return [];
   const shuffled = [...usable].sort(() => Math.random() - 0.5);
   if (count <= shuffled.length) return shuffled.slice(0, count);
-  // pad with replacement
   const out = [...shuffled];
   while (out.length < count) {
     out.push(usable[Math.floor(Math.random() * usable.length)]);
@@ -79,10 +79,10 @@ async function pickBankImages(count: number): Promise<string[]> {
   return out;
 }
 
-async function loadImageDataUrl(absPath: string): Promise<string | null> {
+async function loadImageDataUrl(key: string): Promise<string | null> {
   try {
-    const buf = await fs.readFile(absPath);
-    const ext = path.extname(absPath).toLowerCase().replace(".", "");
+    const buf = await downloadObject(key);
+    const ext = path.extname(key).toLowerCase().replace(".", "");
     const mime = ext === "jpg" ? "jpeg" : ext;
     return `data:image/${mime};base64,${buf.toString("base64")}`;
   } catch {
@@ -518,7 +518,8 @@ export interface RenderCarouselArgs {
 export interface RenderCarouselResult {
   carouselId: number;
   format: RenderFormat;
-  paths: string[]; // absolute paths of generated PNGs
+  /** Storage keys of generated PNGs inside the bank bucket. */
+  paths: string[];
 }
 
 export async function renderCarousel(args: RenderCarouselArgs): Promise<RenderCarouselResult> {
@@ -533,57 +534,49 @@ export async function renderCarousel(args: RenderCarouselArgs): Promise<RenderCa
   const slides = (row.slides ?? []) as CarouselSlide[];
   if (!slides.length) throw new Error(`carousel #${carouselId} n'a pas de slides`);
 
-  await fs.mkdir(OUTPUT_DIR, { recursive: true });
-
-  // Pour chaque slide non-outro, déterminer l'image à utiliser :
-  // - si imageStorageKey est défini → ce fichier précis (stable)
-  // - sinon → tirage aléatoire UNE FOIS, puis persisté sur la slide pour rester stable
+  // Pour chaque slide non-outro, déterminer la storageKey à utiliser :
+  //  - si imageStorageKey est défini → cette clé précise (stable)
+  //  - sinon → tirage aléatoire UNE FOIS, puis persisté sur la slide pour rester stable
   const nonOutroSlides = slides.filter((s) => s.type !== "outro");
   const needsRandom = nonOutroSlides.filter((s) => !s.imageStorageKey).length;
   const randomPicks = await pickBankImages(needsRandom);
   let randomIdx = 0;
 
-  // On construit une copie mutable des slides pour persister les picks aléatoires.
   const mutatedSlides: CarouselSlide[] = slides.map((s) => ({ ...s }));
   let slidesChanged = false;
 
-  const slideToImagePath = new Map<number, string | null>();
+  const slideToImageKey = new Map<number, string | null>();
   for (const s of nonOutroSlides) {
     if (s.imageStorageKey) {
-      const p = path.join(BANK_DIR, s.imageStorageKey);
-      if (existsSync(p)) {
-        slideToImagePath.set(s.slide_number, p);
+      if (await existsObject(s.imageStorageKey)) {
+        slideToImageKey.set(s.slide_number, s.imageStorageKey);
         continue;
       }
-      // Fichier introuvable → on retire la clé invalide et on retombe en aléatoire
       const idx = mutatedSlides.findIndex((m) => m.slide_number === s.slide_number);
       if (idx !== -1) {
         mutatedSlides[idx].imageStorageKey = null;
         slidesChanged = true;
       }
     }
-    const pickedAbs = randomPicks[randomIdx++] ?? null;
-    slideToImagePath.set(s.slide_number, pickedAbs);
-    if (pickedAbs) {
-      // Persiste le pick aléatoire pour que les futurs re-renders soient stables
-      const rel = path.relative(BANK_DIR, pickedAbs).split(path.sep).join("/");
+    const pickedKey = randomPicks[randomIdx++] ?? null;
+    slideToImageKey.set(s.slide_number, pickedKey);
+    if (pickedKey) {
       const idx = mutatedSlides.findIndex((m) => m.slide_number === s.slide_number);
       if (idx !== -1) {
-        mutatedSlides[idx].imageStorageKey = rel;
+        mutatedSlides[idx].imageStorageKey = pickedKey;
         slidesChanged = true;
       }
     }
   }
 
-  // Fichiers PNG existants (chemins absolus, indexés par slide_number)
-  const existingRelPaths = (row.renderedPaths as string[] | null) ?? [];
-  const existingAbsBySlide = new Map<number, string>();
-  for (const rel of existingRelPaths) {
+  // Existing rendered slide keys, indexed by slide_number
+  const existingRelKeys = (row.renderedPaths as string[] | null) ?? [];
+  const existingKeyBySlide = new Map<number, string>();
+  for (const rel of existingRelKeys) {
     const m = rel.match(/_slide_(\d+)\.png$/);
-    if (m) existingAbsBySlide.set(parseInt(m[1], 10), path.join(BANK_DIR, rel));
+    if (m) existingKeyBySlide.set(parseInt(m[1], 10), rel);
   }
 
-  // Sélection des slides à réellement rendre
   const renderTargets = onlySlideNumbers && onlySlideNumbers.length
     ? new Set(onlySlideNumbers)
     : null;
@@ -591,7 +584,7 @@ export async function renderCarousel(args: RenderCarouselArgs): Promise<RenderCa
   const fonts = await loadFonts();
   const total = slides.length;
 
-  const finalPaths: string[] = [];
+  const finalKeys: string[] = [];
   let renderedCount = 0;
   const toRender = renderTargets
     ? slides.filter((s) => renderTargets.has(s.slide_number)).length
@@ -599,24 +592,20 @@ export async function renderCarousel(args: RenderCarouselArgs): Promise<RenderCa
 
   for (let i = 0; i < slides.length; i++) {
     const s = slides[i];
-    const out = path.join(
-      OUTPUT_DIR,
-      `carousel_${carouselId}_slide_${String(s.slide_number).padStart(2, "0")}.png`
-    );
+    const outName = `carousel_${carouselId}_slide_${String(s.slide_number).padStart(2, "0")}.png`;
+    const outKey = joinKey(PREFIX.output, outName);
 
     const shouldRender = !renderTargets || renderTargets.has(s.slide_number);
     if (!shouldRender) {
-      // Conserve le PNG existant s'il est dispo
-      const existing = existingAbsBySlide.get(s.slide_number);
-      if (existing && existsSync(existing)) {
-        finalPaths.push(existing);
+      const existing = existingKeyBySlide.get(s.slide_number);
+      if (existing && (await existsObject(existing))) {
+        finalKeys.push(existing);
         continue;
       }
-      // Pas de PNG existant → on est obligé de le rendre quand même
     }
 
-    const imgAbs = s.type === "outro" ? null : slideToImagePath.get(s.slide_number) ?? null;
-    const imgDataUrl = imgAbs ? await loadImageDataUrl(imgAbs) : null;
+    const imgKey = s.type === "outro" ? null : slideToImageKey.get(s.slide_number) ?? null;
+    const imgDataUrl = imgKey ? await loadImageDataUrl(imgKey) : null;
 
     const plan: SlidePlan = {
       layout: s.type,
@@ -650,28 +639,26 @@ export async function renderCarousel(args: RenderCarouselArgs): Promise<RenderCa
     });
     const { Resvg } = await import(/* webpackIgnore: true */ "@resvg/resvg-js");
     const png = new Resvg(svg, { fitTo: { mode: "width", value: dims.width } }).render().asPng();
-    await fs.writeFile(out, png);
-    finalPaths.push(out);
+    await uploadObject(outKey, png, "image/png");
+    finalKeys.push(outKey);
     renderedCount++;
     if (args.onProgress && toRender > 0) {
       args.onProgress(Math.round((renderedCount / toRender) * 100));
     }
   }
 
-  // Persiste : slides (avec picks stables) + chemins PNG + format
-  const relPaths = finalPaths.map((p) => path.relative(BANK_DIR, p).split(path.sep).join("/"));
   await db
     .update(carousels)
     .set({
       ...(slidesChanged ? { slides: mutatedSlides } : {}),
       renderedAt: new Date(),
-      renderedPaths: relPaths,
+      renderedPaths: finalKeys,
       renderFormat: format,
       updatedAt: new Date(),
     })
     .where(eq(carousels.id, carouselId));
 
-  return { carouselId, format, paths: finalPaths };
+  return { carouselId, format, paths: finalKeys };
 }
 
 export async function loadRenderedPaths(carouselId: number): Promise<string[]> {
@@ -682,9 +669,5 @@ export async function loadRenderedPaths(carouselId: number): Promise<string[]> {
     .where(eq(carousels.id, carouselId))
     .limit(1);
   if (!row?.renderedPaths) return [];
-  return (row.renderedPaths as string[]).map((rel) => path.join(BANK_DIR, rel));
+  return row.renderedPaths as string[];
 }
-
-// Unused imports kept for re-export needs by other files
-void DONE_DIR;
-void GENERIC_DIR;

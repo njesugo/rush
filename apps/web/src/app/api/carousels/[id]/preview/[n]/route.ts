@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "node:fs";
-import path from "node:path";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { getDb, carousels } from "@rush/db";
-import { BANK_DIR } from "@rush/services";
+import { signedUrl } from "@rush/services";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,21 +27,16 @@ export async function GET(
     .from(carousels)
     .where(eq(carousels.id, carouselId))
     .limit(1);
-  const rel = (row?.renderedPaths as string[] | null)?.[slideIdx];
-  if (!rel) return NextResponse.json({ error: "not rendered" }, { status: 404 });
+  const key = (row?.renderedPaths as string[] | null)?.[slideIdx];
+  if (!key) return NextResponse.json({ error: "not rendered" }, { status: 404 });
 
-  const abs = path.join(BANK_DIR, rel);
-  if (!abs.startsWith(BANK_DIR)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  if (!fs.existsSync(abs)) return NextResponse.json({ error: "missing file" }, { status: 404 });
-
-  const stat = fs.statSync(abs);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const body = fs.createReadStream(abs) as any;
-  return new Response(body, {
-    headers: {
-      "Content-Type": "image/png",
-      "Content-Length": String(stat.size),
-      "Cache-Control": "private, max-age=300",
-    },
-  });
+  try {
+    const url = await signedUrl(key, 600);
+    return NextResponse.redirect(url, { status: 307 });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "signed url failed" },
+      { status: 404 }
+    );
+  }
 }

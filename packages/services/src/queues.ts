@@ -18,7 +18,7 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 /* ---------- Job payload types ---------- */
 export interface BgRemovalJobData {
   imageId: number;
-  rawPath: string; // absolute path on disk
+  rawKey: string; // storage key inside the bank bucket (e.g. "raw/...")
   filename: string;
 }
 

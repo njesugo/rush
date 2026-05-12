@@ -1,6 +1,7 @@
 export * from "./redis";
 export * from "./queues";
 export * from "./paths";
+export * from "./storage";
 export * from "./imagePipeline";
 export * from "./news/scraper";
 export * from "./news/editorialScore";

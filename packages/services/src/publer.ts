@@ -3,8 +3,7 @@
  * Uploads slide PNGs as media, then schedules or publishes immediately on Instagram.
  */
 
-import fs from "node:fs";
-import path from "node:path";
+import { downloadObject, basenameOfKey } from "./storage";
 
 const BASE = "https://app.publer.com/api/v1";
 const POLL_INTERVAL_MS = 3000;
@@ -88,13 +87,12 @@ export async function getInstagramAccountId(): Promise<string> {
   return cachedInstagramAccountId;
 }
 
-export async function uploadMedia(filePath: string): Promise<string> {
+export async function uploadMedia(key: string): Promise<string> {
   const wsId = await getWorkspaceId();
-  if (!fs.existsSync(filePath)) throw new Error(`Fichier introuvable : ${filePath}`);
-  const buf = await fs.promises.readFile(filePath);
-  const blob = new Blob([buf], { type: "image/png" });
+  const buf = await downloadObject(key);
+  const blob = new Blob([new Uint8Array(buf)], { type: "image/png" });
   const form = new FormData();
-  form.append("file", blob, path.basename(filePath));
+  form.append("file", blob, basenameOfKey(key));
   const data = await publerFetch<{ id?: string }>(`${BASE}/media`, {
     method: "POST",
     headers: workspaceHeaders(wsId),

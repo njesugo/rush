@@ -1,11 +1,16 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { spawn } from "node:child_process";
 import { Worker, type Job } from "bullmq";
 import sharp from "sharp";
 import {
   QUEUE_NAMES,
-  GENERIC_DIR,
+  PREFIX,
+  joinKey,
+  basenameOfKey,
+  downloadObject,
+  uploadObject,
   getRedis,
   markImageFailed,
   markImageGeneric,
@@ -43,9 +48,9 @@ function runChild(rawPath: string, outPath: string): Promise<{ ok: boolean; reas
   });
 }
 
-async function handle(job: Job<BgRemovalJobData>): Promise<{ outPath: string }> {
-  const { imageId, rawPath, filename } = job.data;
-  logger.info({ imageId, filename }, "bg-removal start");
+async function handle(job: Job<BgRemovalJobData>): Promise<{ outKey: string }> {
+  const { imageId, rawKey, filename } = job.data;
+  logger.info({ imageId, filename, rawKey }, "bg-removal start");
   await publishJobEvent({
     type: "started",
     queue: QUEUE_NAMES.bgRemoval,
@@ -55,43 +60,52 @@ async function handle(job: Job<BgRemovalJobData>): Promise<{ outPath: string }> 
     at: Date.now(),
   });
 
-  const buf = await fs.readFile(rawPath);
-  const outName = path.basename(rawPath).replace(/\.[^.]+$/, "") + ".png";
-  const outPath = path.join(GENERIC_DIR, outName);
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), `bgrm-${imageId}-`));
+  const rawBase = basenameOfKey(rawKey);
+  const rawTmp = path.join(workDir, rawBase);
+  const outName = rawBase.replace(/\.[^.]+$/, "") + ".png";
+  const outTmp = path.join(workDir, outName);
+  const outKey = joinKey(PREFIX.generic, outName);
 
-  const result = await runChild(rawPath, outPath);
-  if (!result.ok) {
-    logger.warn(
-      { imageId, reason: result.reason },
-      "bg-removal child failed — fallback: copy original"
-    );
-    // Fallback: write the original buffer as PNG-named file so the image
-    // still shows up in the cleanup queue. The cleanup operator can mark it
-    // "redo" later if needed.
-    await fs.writeFile(outPath, buf);
-  }
-
-  // Read dims
-  let width: number | undefined;
-  let height: number | undefined;
   try {
-    const meta = await sharp(outPath).metadata();
-    width = meta.width;
-    height = meta.height;
-  } catch {
-    /* non-fatal */
-  }
+    const buf = await downloadObject(rawKey);
+    await fs.writeFile(rawTmp, buf);
 
-  await markImageGeneric(imageId, rawPath, outPath, { width, height });
-  await publishJobEvent({
-    type: "completed",
-    queue: QUEUE_NAMES.bgRemoval,
-    jobId: String(job.id),
-    result: { imageId, outPath },
-    at: Date.now(),
-  });
-  logger.info({ imageId, outPath }, "bg-removal done");
-  return { outPath };
+    const result = await runChild(rawTmp, outTmp);
+    if (!result.ok) {
+      logger.warn(
+        { imageId, reason: result.reason },
+        "bg-removal child failed — fallback: copy original"
+      );
+      await fs.writeFile(outTmp, buf);
+    }
+
+    let width: number | undefined;
+    let height: number | undefined;
+    try {
+      const meta = await sharp(outTmp).metadata();
+      width = meta.width;
+      height = meta.height;
+    } catch {
+      /* non-fatal */
+    }
+
+    const outBytes = await fs.readFile(outTmp);
+    await uploadObject(outKey, outBytes, "image/png");
+
+    await markImageGeneric(imageId, rawKey, outKey, { width, height });
+    await publishJobEvent({
+      type: "completed",
+      queue: QUEUE_NAMES.bgRemoval,
+      jobId: String(job.id),
+      result: { imageId, outKey },
+      at: Date.now(),
+    });
+    logger.info({ imageId, outKey }, "bg-removal done");
+    return { outKey };
+  } finally {
+    await fs.rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 export function startBgRemovalWorker(): Worker<BgRemovalJobData> {
@@ -104,7 +118,7 @@ export function startBgRemovalWorker(): Worker<BgRemovalJobData> {
     if (!job) return;
     logger.error({ jobId: job.id, err: err.message }, "bg-removal failed");
     try {
-      await markImageFailed(job.data.imageId, job.data.rawPath, err.message);
+      await markImageFailed(job.data.imageId, job.data.rawKey, err.message);
     } catch (e) {
       logger.error({ e }, "markImageFailed failed");
     }

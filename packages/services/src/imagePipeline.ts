@@ -1,20 +1,27 @@
+/**
+ * Image ingestion / lifecycle.
+ *
+ * Storage backend: Supabase Storage (bucket "bank") — no local disk.
+ * The `images.storageKey` column holds the bucket object key, e.g.
+ *   raw/<file>, generic/<file>.png, done/<file>, fail/<file>
+ */
+
 import { createHash } from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { getDb, images } from "@rush/db";
-import {
-  BANK_DIR,
-  RAW_DIR,
-  GENERIC_DIR,
-  DONE_DIR,
-  FAIL_DIR,
-  ensureBankDirs,
-  toStorageKey,
-  resolveStorage,
-} from "./paths";
 import { bgRemovalQueue } from "./queues";
 import { publishJobEvent } from "./redis";
+import {
+  PREFIX,
+  joinKey,
+  basenameOfKey,
+  prefixOfKey,
+  uploadObject,
+  moveObject,
+  removeObject,
+  existsObject,
+} from "./storage";
 
 const ALLOWED_EXT = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
@@ -25,6 +32,13 @@ function sha256(buf: Buffer): string {
 function sanitizeName(name: string): string {
   const base = path.basename(name).replace(/[^a-zA-Z0-9._-]/g, "_");
   return base.slice(0, 120);
+}
+
+function contentTypeForExt(ext: string): string {
+  if (ext === ".png") return "image/png";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  return "image/jpeg";
 }
 
 export interface UploadInput {
@@ -41,18 +55,16 @@ export interface UploadResult {
 
 /**
  * Persist an uploaded file:
- * - upload_generic → goes to /generic, status=generic
- * - upload_raw     → goes to /raw, status=raw, enqueues bg-removal job
+ * - upload_generic → goes to generic/, status=generic
+ * - upload_raw     → goes to raw/, status=raw, enqueues bg-removal job
  */
 export async function ingestUpload({ filename, buffer, source }: UploadInput): Promise<UploadResult> {
-  await ensureBankDirs();
   const ext = path.extname(filename).toLowerCase();
   if (!ALLOWED_EXT.has(ext)) throw new Error(`Unsupported extension: ${ext}`);
 
   const hash = sha256(buffer);
   const db = getDb();
 
-  // Dedupe by hash
   const [existing] = await db.select().from(images).where(eq(images.hash, hash)).limit(1);
   if (existing) {
     return { imageId: existing.id, status: "duplicate", storageKey: existing.storageKey };
@@ -61,19 +73,13 @@ export async function ingestUpload({ filename, buffer, source }: UploadInput): P
   const safe = sanitizeName(filename);
   const stamped = `${Date.now()}-${hash.slice(0, 8)}-${safe}`;
 
-  let absPath: string;
-  let dbStatus: "raw" | "generic";
-  if (source === "upload_generic") {
-    // Force PNG extension preserved
-    absPath = path.join(GENERIC_DIR, stamped);
-    dbStatus = "generic";
-  } else {
-    absPath = path.join(RAW_DIR, stamped);
-    dbStatus = "raw";
-  }
+  const dbStatus: "raw" | "generic" = source === "upload_generic" ? "generic" : "raw";
+  const storageKey =
+    dbStatus === "generic"
+      ? joinKey(PREFIX.generic, stamped)
+      : joinKey(PREFIX.raw, stamped);
 
-  await fs.writeFile(absPath, buffer);
-  const storageKey = toStorageKey(absPath);
+  await uploadObject(storageKey, buffer, contentTypeForExt(ext));
 
   const [row] = await db
     .insert(images)
@@ -89,7 +95,7 @@ export async function ingestUpload({ filename, buffer, source }: UploadInput): P
   if (dbStatus === "raw") {
     await bgRemovalQueue().add(
       "bg-removal",
-      { imageId: row.id, rawPath: absPath, filename: safe },
+      { imageId: row.id, rawKey: storageKey, filename: safe },
       { jobId: `bg-${row.id}` }
     );
   }
@@ -104,44 +110,42 @@ export async function ingestUpload({ filename, buffer, source }: UploadInput): P
   return { imageId: row.id, status: dbStatus, storageKey };
 }
 
-/** Mark image as fail (move file + update row). */
-export async function markImageFailed(imageId: number, srcAbs: string, err: string): Promise<void> {
-  await ensureBankDirs();
-  const dest = path.join(FAIL_DIR, path.basename(srcAbs));
+/** Mark image as fail: move object to fail/ and update DB. */
+export async function markImageFailed(imageId: number, srcKey: string, err: string): Promise<void> {
+  const destKey = joinKey(PREFIX.fail, basenameOfKey(srcKey));
   try {
-    await fs.rename(srcAbs, dest);
+    await moveObject(srcKey, destKey);
   } catch {
-    /* ignore */
+    /* best-effort — file may already have been moved */
   }
   const db = getDb();
   await db
     .update(images)
-    .set({ status: "fail", storageKey: toStorageKey(dest), updatedAt: new Date() })
+    .set({ status: "fail", storageKey: destKey, updatedAt: new Date() })
     .where(eq(images.id, imageId));
   await publishJobEvent({ type: "image:updated", imageId, status: "fail", at: Date.now() });
   void err;
 }
 
-/** Mark image as generic after successful bg-removal. */
+/** Mark image as generic after successful bg-removal. Moves raw → done/, sets storageKey to outKey. */
 export async function markImageGeneric(
   imageId: number,
-  rawAbs: string,
-  outAbs: string,
+  rawKey: string,
+  outKey: string,
   meta: { width?: number; height?: number }
 ): Promise<void> {
-  await ensureBankDirs();
-  // Move raw to done/
+  const doneKey = joinKey(PREFIX.done, basenameOfKey(rawKey));
   try {
-    await fs.rename(rawAbs, path.join(DONE_DIR, path.basename(rawAbs)));
+    await moveObject(rawKey, doneKey);
   } catch {
-    /* ignore */
+    /* best-effort */
   }
   const db = getDb();
   await db
     .update(images)
     .set({
       status: "generic",
-      storageKey: toStorageKey(outAbs),
+      storageKey: outKey,
       width: meta.width,
       height: meta.height,
       updatedAt: new Date(),
@@ -150,69 +154,58 @@ export async function markImageGeneric(
   await publishJobEvent({ type: "image:updated", imageId, status: "generic", at: Date.now() });
 }
 
-export { BANK_DIR, RAW_DIR, GENERIC_DIR, DONE_DIR, FAIL_DIR };
-
 /**
  * Re-enqueue a bg-removal job for an existing image:
- * - Locate original raw file (in RAW_DIR / DONE_DIR / FAIL_DIR or current storage),
- * - Move it back to RAW_DIR if needed,
- * - Reset DB status to "raw",
- * - Enqueue a new bg-removal job.
- *
- * Returns the absolute raw path that will be processed.
+ *  - locate the original "raw" object (current key, or done/fail variants),
+ *  - move it back under raw/,
+ *  - reset DB status to "raw",
+ *  - enqueue a new bg-removal job.
  */
 export async function requeueBgRemoval(imageId: number): Promise<string> {
-  await ensureBankDirs();
   const db = getDb();
   const [row] = await db.select().from(images).where(eq(images.id, imageId)).limit(1);
   if (!row) throw new Error(`image #${imageId} not found`);
 
-  const currentAbs = resolveStorage(row.storageKey);
-  const currentBase = path.basename(currentAbs);
+  const currentKey = row.storageKey;
+  const currentBase = basenameOfKey(currentKey);
   const stem = currentBase.replace(/\.[^.]+$/, "");
   const originalExt = path.extname(row.filename) || path.extname(currentBase);
   const originalBase = `${stem}${originalExt}`;
 
   const candidates = [
-    currentAbs,
-    path.join(RAW_DIR, originalBase),
-    path.join(DONE_DIR, originalBase),
-    path.join(FAIL_DIR, originalBase),
-    path.join(DONE_DIR, currentBase),
-    path.join(FAIL_DIR, currentBase),
+    currentKey,
+    joinKey(PREFIX.raw, originalBase),
+    joinKey(PREFIX.done, originalBase),
+    joinKey(PREFIX.fail, originalBase),
+    joinKey(PREFIX.done, currentBase),
+    joinKey(PREFIX.fail, currentBase),
   ];
-  let sourceAbs: string | null = null;
+  let sourceKey: string | null = null;
   for (const c of candidates) {
-    try {
-      await fs.access(c);
-      sourceAbs = c;
+    if (await existsObject(c)) {
+      sourceKey = c;
       break;
-    } catch {
-      /* keep trying */
     }
   }
-  if (!sourceAbs) throw new Error(`source file missing for image #${imageId}`);
+  if (!sourceKey) throw new Error(`source object missing for image #${imageId}`);
 
-  let rawAbs = sourceAbs;
-  if (path.dirname(sourceAbs) !== RAW_DIR) {
-    rawAbs = path.join(RAW_DIR, originalBase);
+  const rawKey = joinKey(PREFIX.raw, originalBase);
+  if (sourceKey !== rawKey) {
     try {
-      await fs.rename(sourceAbs, rawAbs);
-    } catch {
-      const buf = await fs.readFile(sourceAbs);
-      await fs.writeFile(rawAbs, buf);
-      await fs.unlink(sourceAbs).catch(() => {});
+      await moveObject(sourceKey, rawKey);
+    } catch (e) {
+      throw new Error(`failed to relocate to raw/: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
   await db
     .update(images)
-    .set({ status: "raw", storageKey: toStorageKey(rawAbs), updatedAt: new Date() })
+    .set({ status: "raw", storageKey: rawKey, updatedAt: new Date() })
     .where(eq(images.id, imageId));
 
   await bgRemovalQueue().add(
     "bg-removal",
-    { imageId, rawPath: rawAbs, filename: row.filename },
+    { imageId, rawKey, filename: row.filename },
     { jobId: `bg-${imageId}-${Date.now()}` }
   );
 
@@ -223,5 +216,18 @@ export async function requeueBgRemoval(imageId: number): Promise<string> {
     at: Date.now(),
   });
 
-  return rawAbs;
+  return rawKey;
 }
+
+/** Delete an image (DB + storage). Best-effort on storage. */
+export async function deleteImage(imageId: number): Promise<void> {
+  const db = getDb();
+  const [row] = await db.select().from(images).where(eq(images.id, imageId)).limit(1);
+  if (!row) return;
+  await removeObject(row.storageKey).catch(() => undefined);
+  await db.delete(images).where(eq(images.id, imageId));
+  await publishJobEvent({ type: "image:updated", imageId, status: "deleted", at: Date.now() });
+}
+
+/** Re-export for convenience. */
+export { PREFIX, prefixOfKey };
