@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7
 # ---- Web (Next.js standalone) ----
 FROM node:20-alpine AS base
-RUN apk add --no-cache libc6-compat
+# yt-dlp + python3 are needed by `probeYoutube` (sync probe in POST /api/reels).
+RUN apk add --no-cache libc6-compat yt-dlp python3
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
@@ -24,7 +25,7 @@ RUN pnpm --filter @rush/web build
 
 # --- runtime: minimal image ---
 FROM node:20-alpine AS runner
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat yt-dlp python3
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
