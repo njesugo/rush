@@ -6,18 +6,35 @@ import {
   type ReelExtractBrollJobData,
 } from "@rush/services";
 import { logger } from "./logger";
+import { extractBrollClips } from "@rush/services";
+import { downloadObject } from "@rush/services";
 
 async function handle(job: Job<ReelExtractBrollJobData>): Promise<void> {
-  logger.warn({ jobId: job.id, data: job.data }, "reel-extract-broll stub (PR4)");
+  const { reelId } = job.data;
+  logger.info({ jobId: job.id, reelId }, "reel-extract-broll start");
   await publishJobEvent({
     type: "started",
     queue: QUEUE_NAMES.reelExtractBroll,
     jobId: String(job.id),
     kind: "reel-extract-broll",
-    payload: job.data ?? {},
+    payload: { reelId },
     at: Date.now(),
   });
-  throw new Error("reel-extract-broll worker not implemented yet (PR4)");
+  const keys = await extractBrollClips({
+    reelId,
+    getSourceVideoFile: async (youtubeId) => {
+      const key = `videos/raw/${youtubeId}.mp4`;
+      return await downloadObject(key);
+    },
+  });
+  logger.info({ jobId: job.id, reelId, keys }, "reel-extract-broll done");
+  await publishJobEvent({
+    type: "completed",
+    queue: QUEUE_NAMES.reelExtractBroll,
+    jobId: String(job.id),
+    result: { reelId, keys },
+    at: Date.now(),
+  });
 }
 
 export function startReelExtractBrollWorker(): Worker<ReelExtractBrollJobData> {
