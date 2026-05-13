@@ -1,7 +1,5 @@
-import { promises as fs } from "node:fs";
 import { eq } from "drizzle-orm";
 import { getDb, sourceVideos, type SourceVideoStatus } from "@rush/db";
-import { uploadObject } from "../storage";
 import {
   cleanupDownload,
   downloadYoutube,
@@ -17,8 +15,15 @@ export const VIDEOS_PREFIX = {
   output: "videos/output",
 } as const;
 
+/**
+ * Marker stored in `source_videos.storage_key` to indicate the source mp4 is not
+ * persisted in object storage and should be re-fetched from YouTube on demand.
+ * Source videos can be hundreds of MB — far above Supabase Free's 50 MB per-object
+ * cap — so we keep only the transcript in Postgres and stream the mp4 from YouTube
+ * each time we need to extract B-roll.
+ */
 export const sourceVideoStorageKey = (youtubeId: string) =>
-  `${VIDEOS_PREFIX.raw}/${youtubeId}.mp4`;
+  `youtube:${youtubeId}`;
 
 /**
  * Idempotent: find an existing `source_videos` row by youtube_id, otherwise
@@ -115,9 +120,9 @@ export async function downloadSourceVideo(sourceVideoId: number): Promise<{
     const dl = await downloadYoutube(row.youtubeUrl);
     workDir = dl.workDir;
 
+    // Don't persist the raw mp4 — it's too big for Supabase Free's per-object cap.
+    // We'll re-download from YouTube when extracting B-roll.
     const key = sourceVideoStorageKey(dl.meta.id);
-    const buf = await fs.readFile(dl.filePath);
-    await uploadObject(key, buf, "video/mp4");
 
     await setStatus(sourceVideoId, "transcribing", { storageKey: key });
 

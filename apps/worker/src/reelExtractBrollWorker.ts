@@ -7,7 +7,6 @@ import {
 } from "@rush/services";
 import { logger } from "./logger";
 import { extractBrollClips } from "@rush/services";
-import { downloadObject } from "@rush/services";
 
 async function handle(job: Job<ReelExtractBrollJobData>): Promise<void> {
   const { reelId } = job.data;
@@ -20,13 +19,7 @@ async function handle(job: Job<ReelExtractBrollJobData>): Promise<void> {
     payload: { reelId },
     at: Date.now(),
   });
-  const keys = await extractBrollClips({
-    reelId,
-    getSourceVideoFile: async (youtubeId) => {
-      const key = `videos/raw/${youtubeId}.mp4`;
-      return await downloadObject(key);
-    },
-  });
+  const keys = await extractBrollClips({ reelId });
   logger.info({ jobId: job.id, reelId, keys }, "reel-extract-broll done");
   await publishJobEvent({
     type: "completed",

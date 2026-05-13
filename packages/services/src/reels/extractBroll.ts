@@ -17,7 +17,8 @@ import {
   type ReelStoryboard,
   type ReelBlock,
 } from "@rush/db";
-import { downloadObject, uploadObject } from "../storage";
+import { uploadObject } from "../storage";
+import { cleanupDownload, downloadYoutube } from "../youtube/download";
 
 const OUTPUT_WIDTH = 1080;
 const OUTPUT_HEIGHT = 960;
@@ -69,7 +70,6 @@ function buildFilter(block: ReelBlock, srcWidth: number, srcHeight: number): str
 
 export async function extractBrollClips(args: {
   reelId: number;
-  getSourceVideoFile: (youtubeId: string) => Promise<Buffer>;
 }): Promise<string[]> {
   const db = getDb();
   const reelRows = await db.select().from(reels).where(eq(reels.id, args.reelId)).limit(1);
@@ -81,13 +81,14 @@ export async function extractBrollClips(args: {
   if (!reel.sourceVideoId) throw new Error(`reel ${args.reelId} has no sourceVideoId`);
   const svRows = await db.select().from(sourceVideos).where(eq(sourceVideos.id, reel.sourceVideoId)).limit(1);
   const sv = svRows[0];
-  if (!sv || !sv.youtubeId || !sv.storageKey) throw new Error(`source_video missing`);
+  if (!sv || !sv.youtubeId || !sv.youtubeUrl) throw new Error(`source_video missing`);
 
-  // Download source mp4
-  const videoBuf = await args.getSourceVideoFile(sv.youtubeId);
+  // Re-fetch source mp4 from YouTube (we don't persist it in storage; see
+  // sourceVideoStorageKey doc).
+  const dl = await downloadYoutube(sv.youtubeUrl);
+  const srcPath = dl.filePath;
+  const ytWorkDir = dl.workDir;
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), `broll-${reel.id}-`));
-  const srcPath = path.join(workDir, `${sv.youtubeId}.mp4`);
-  await fs.writeFile(srcPath, videoBuf);
 
   // Probe source dimensions
   const probeArgs = [
@@ -144,5 +145,6 @@ export async function extractBrollClips(args: {
 
   // Cleanup
   await fs.rm(workDir, { recursive: true, force: true });
+  await cleanupDownload(ytWorkDir).catch(() => undefined);
   return keys;
 }
