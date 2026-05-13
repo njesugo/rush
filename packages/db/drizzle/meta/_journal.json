@@ -50,6 +50,13 @@
       "when": 1778602219268,
       "tag": "0006_clammy_punisher",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778673356444,
+      "tag": "0007_crazy_rawhide_kid",
+      "breakpoints": true
     }
   ]
 }

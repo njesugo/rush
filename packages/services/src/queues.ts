@@ -11,6 +11,10 @@ export const QUEUE_NAMES = {
   pinterestSync: "pinterest-sync",
   carouselRender: "carousel-render",
   carouselPublish: "carousel-publish",
+  ytDownload: "yt-download",
+  ytTranscribe: "yt-transcribe",
+  reelGenerate: "reel-generate",
+  reelExtractBroll: "reel-extract-broll",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -63,6 +67,26 @@ export interface CarouselPublishJobData {
   forceRerender?: boolean;
 }
 
+/** Download a YouTube video (yt-dlp), upload mp4 to Supabase. */
+export interface YtDownloadJobData {
+  sourceVideoId: number;
+}
+
+/** Run Whisper over a downloaded source video and persist transcript. */
+export interface YtTranscribeJobData {
+  sourceVideoId: number;
+}
+
+/** Ask Claude to produce a reel storyboard from the transcript + user angle. */
+export interface ReelGenerateJobData {
+  reelId: number;
+}
+
+/** FFmpeg-extract every block's B-roll clip into Supabase Storage. */
+export interface ReelExtractBrollJobData {
+  reelId: number;
+}
+
 /* ---------- Queue singletons ---------- */
 const _queues = new Map<string, Queue>();
 
@@ -96,5 +120,13 @@ export const carouselRenderQueue = () =>
   makeQueue<CarouselRenderJobData>(QUEUE_NAMES.carouselRender);
 export const carouselPublishQueue = () =>
   makeQueue<CarouselPublishJobData>(QUEUE_NAMES.carouselPublish);
+
+export const ytDownloadQueue = () => makeQueue<YtDownloadJobData>(QUEUE_NAMES.ytDownload);
+export const ytTranscribeQueue = () =>
+  makeQueue<YtTranscribeJobData>(QUEUE_NAMES.ytTranscribe);
+export const reelGenerateQueue = () =>
+  makeQueue<ReelGenerateJobData>(QUEUE_NAMES.reelGenerate);
+export const reelExtractBrollQueue = () =>
+  makeQueue<ReelExtractBrollJobData>(QUEUE_NAMES.reelExtractBroll);
 
 export type { JobsOptions };

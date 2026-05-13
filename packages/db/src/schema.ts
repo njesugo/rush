@@ -289,3 +289,100 @@ export const appSettings = pgTable("app_settings", {
   value: jsonb("value"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+/* ----------- Source videos (YouTube originals, reusable across reels) ----------- */
+export type TranscriptSegment = {
+  start: number;
+  end: number;
+  text: string;
+  /** Optional word-level timestamps for fine cuts. */
+  words?: Array<{ word: string; start: number; end: number }>;
+};
+
+export type SourceVideoStatus =
+  | "pending"
+  | "downloading"
+  | "transcribing"
+  | "ready"
+  | "failed";
+
+export const sourceVideos = pgTable(
+  "source_videos",
+  {
+    id: serial("id").primaryKey(),
+    youtubeId: text("youtube_id").notNull(),
+    youtubeUrl: text("youtube_url").notNull(),
+    title: text("title"),
+    channel: text("channel"),
+    durationS: real("duration_s"),
+    storageKey: text("storage_key"), // videos/raw/<ytId>.mp4 in Supabase
+    transcript: jsonb("transcript").$type<TranscriptSegment[] | null>(),
+    status: text("status").$type<SourceVideoStatus>().default("pending").notNull(),
+    error: text("error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    youtubeIdUnique: uniqueIndex("source_videos_yt_id_unique").on(t.youtubeId),
+    statusIdx: index("source_videos_status_idx").on(t.status),
+  })
+);
+
+/* ----------- Reels ----------- */
+export type ReelStorageBroll = {
+  /** offset in seconds in the source video */
+  in_s: number;
+  out_s: number;
+  /** Crop region in source-video normalized coordinates (0..1).
+   *  (x,y) = top-left corner of the crop. scale = relative zoom (1 = full frame). */
+  zoom: { x: number; y: number; scale: number };
+  /** Free-text justification from Claude. */
+  reason?: string;
+};
+
+export type ReelBlock = {
+  script: string;
+  est_duration_s: number;
+  broll: ReelStorageBroll | null;
+};
+
+export type ReelStoryboard = {
+  hook: string;
+  blocks: ReelBlock[];
+};
+
+export type ReelStatus =
+  | "draft"            // just created, no transcript yet
+  | "downloading"      // yt-dlp running
+  | "transcribing"     // whisper running
+  | "generating"       // claude running
+  | "ready"            // storyboard available, user can edit
+  | "broll_rendering"  // ffmpeg extracting clips
+  | "broll_ready"      // clips on supabase, zip downloadable
+  | "failed";
+
+export const reels = pgTable(
+  "reels",
+  {
+    id: serial("id").primaryKey(),
+    title: text("title"),
+    youtubeUrl: text("youtube_url").notNull(),
+    angle: text("angle").notNull(),
+    sourceVideoId: integer("source_video_id").references(() => sourceVideos.id, {
+      onDelete: "set null",
+    }),
+    storyboard: jsonb("storyboard").$type<ReelStoryboard | null>(),
+    /** Mirror of storyboard.hook to allow indexing/listing without parsing JSON. */
+    hook: text("hook"),
+    /** Storage keys of extracted b-roll clips (one per block, ordered). */
+    brollKeys: jsonb("broll_keys").$type<Array<string | null>>().default([]),
+    status: text("status").$type<ReelStatus>().default("draft").notNull(),
+    error: text("error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    statusIdx: index("reels_status_idx").on(t.status),
+    sourceVideoIdx: index("reels_source_video_idx").on(t.sourceVideoId),
+  })
+);

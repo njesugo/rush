@@ -1,7 +1,10 @@
 # syntax=docker/dockerfile:1.7
 # ---- Worker (BullMQ + bg-removal + render) ----
 FROM node:20-alpine AS base
-RUN apk add --no-cache libc6-compat
+# - libc6-compat: required by some native node deps (sharp, canvas, ...)
+# - ffmpeg: used by carousel renderer + reel B-roll extraction
+# - yt-dlp + python3: used by reel YouTube downloader
+RUN apk add --no-cache libc6-compat ffmpeg yt-dlp python3
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
