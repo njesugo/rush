@@ -20,3 +20,5 @@ export * from "./publer";
 export * from "./youtube/download";
 export * from "./youtube/transcribe";
 export * from "./youtube/process";
+export * from "./reels/script";
+export * from "./reels/generate";

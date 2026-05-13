@@ -3,21 +3,36 @@ import {
   QUEUE_NAMES,
   getRedis,
   publishJobEvent,
+  generateReelStoryboard,
   type ReelGenerateJobData,
 } from "@rush/services";
 import { logger } from "./logger";
 
 async function handle(job: Job<ReelGenerateJobData>): Promise<void> {
-  logger.warn({ jobId: job.id, data: job.data }, "reel-generate stub (PR3)");
+  const { reelId } = job.data;
+  logger.info({ jobId: job.id, reelId }, "reel-generate start");
   await publishJobEvent({
     type: "started",
     queue: QUEUE_NAMES.reelGenerate,
     jobId: String(job.id),
     kind: "reel-generate",
-    payload: job.data ?? {},
+    payload: { reelId },
     at: Date.now(),
   });
-  throw new Error("reel-generate worker not implemented yet (PR3)");
+
+  const storyboard = await generateReelStoryboard(reelId);
+
+  logger.info(
+    { jobId: job.id, reelId, blocks: storyboard.blocks.length },
+    "reel-generate done"
+  );
+  await publishJobEvent({
+    type: "completed",
+    queue: QUEUE_NAMES.reelGenerate,
+    jobId: String(job.id),
+    result: { reelId, blocks: storyboard.blocks.length },
+    at: Date.now(),
+  });
 }
 
 export function startReelGenerateWorker(): Worker<ReelGenerateJobData> {
