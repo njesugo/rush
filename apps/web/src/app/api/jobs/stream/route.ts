@@ -24,6 +24,9 @@ export async function GET(req: NextRequest): Promise<Response> {
         }
       };
 
+      // 2KB padding comment forces proxies (Railway edge / Cloudflare-like) to
+      // exit buffering mode and start streaming chunks immediately.
+      controller.enqueue(encoder.encode(`: ${" ".repeat(2048)}\n\n`));
       send(JSON.stringify({ type: "ready", at: Date.now() }), "ready");
 
       sub.on("message", (_chan, msg) => send(msg));
@@ -34,7 +37,7 @@ export async function GET(req: NextRequest): Promise<Response> {
         } catch {
           /* closed */
         }
-      }, 25_000);
+      }, 10_000);
 
       const cleanup = () => {
         clearInterval(ping);
@@ -53,10 +56,12 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/event-stream",
+      "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
+      // Explicitly tell any intermediate proxy NOT to gzip this response.
+      "Content-Encoding": "identity",
     },
   });
 }
