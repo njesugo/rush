@@ -12,6 +12,7 @@ import {
   Activity,
   Settings,
   CircleDot,
+  Film,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: "/", label: "Aperçu", icon: LayoutGrid },
   { href: "/carousels", label: "Carousels", icon: Layers, badge: 3 },
+  { href: "/reels", label: "Reels", icon: Film },
   { href: "/news", label: "Actualités", icon: Newspaper },
   { href: "/bank", label: "Banque d'images", icon: ImageIcon },
   { href: "/cleanup", label: "File de tri", icon: ListChecks, badge: 12 },
