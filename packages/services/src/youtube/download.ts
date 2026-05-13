@@ -21,6 +21,56 @@ export function parseYoutubeId(input: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Materialize the YouTube cookies file once per process.
+ * YouTube blocks unauthenticated yt-dlp from cloud IPs ("sign in to confirm
+ * you're not a bot"). The user can export Netscape-format cookies from a
+ * logged-in browser and pass them via env (raw or base64-encoded).
+ */
+let cookiesPathPromise: Promise<string | null> | null = null;
+async function getCookiesPath(): Promise<string | null> {
+  if (cookiesPathPromise) return cookiesPathPromise;
+  cookiesPathPromise = (async () => {
+    const explicit = process.env.YOUTUBE_COOKIES_FILE?.trim();
+    if (explicit) {
+      try {
+        await fs.access(explicit);
+        return explicit;
+      } catch {
+        return null;
+      }
+    }
+    const b64 = process.env.YOUTUBE_COOKIES_B64?.trim();
+    const raw = process.env.YOUTUBE_COOKIES?.trim();
+    if (!b64 && !raw) return null;
+    const content = b64 ? Buffer.from(b64, "base64").toString("utf8") : raw!;
+    if (!content.includes("\t") && !content.startsWith("# Netscape")) {
+      // Probably wrong format — yt-dlp would reject it.
+      return null;
+    }
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ytcookies-"));
+    const file = path.join(dir, "cookies.txt");
+    await fs.writeFile(file, content, "utf8");
+    return file;
+  })();
+  return cookiesPathPromise;
+}
+
+/** Common args appended to every yt-dlp invocation (cookies, anti-bot tricks). */
+async function ytExtraArgs(): Promise<string[]> {
+  const args: string[] = [];
+  const cookies = await getCookiesPath();
+  if (cookies) args.push("--cookies", cookies);
+  // Help bypass the "confirm you're not a bot" check without cookies.
+  args.push(
+    "--extractor-args",
+    "youtube:player_client=android,web",
+    "--user-agent",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+  );
+  return args;
+}
+
 /** Spawn yt-dlp/ffmpeg, collect stdout, raise on non-zero exit. */
 function run(
   cmd: string,
@@ -60,9 +110,10 @@ function run(
 
 /** Probe a YouTube URL for metadata without downloading. */
 export async function probeYoutube(url: string): Promise<YtMetadata> {
+  const extra = await ytExtraArgs();
   const { stdout } = await run(
     "yt-dlp",
-    ["--no-playlist", "--no-warnings", "-J", url],
+    ["--no-playlist", "--no-warnings", "-J", ...extra, url],
     { timeoutMs: 30_000 }
   );
   const json = JSON.parse(stdout);
@@ -107,6 +158,7 @@ export async function downloadYoutube(url: string): Promise<DownloadedVideo> {
   const audioPath = path.join(workDir, `${meta.id}.wav`);
 
   // 720p ceiling, prefer mp4 muxing for compatibility with downstream FFmpeg.
+  const extra = await ytExtraArgs();
   await run(
     "yt-dlp",
     [
@@ -118,6 +170,7 @@ export async function downloadYoutube(url: string): Promise<DownloadedVideo> {
       "mp4",
       "-o",
       filePath,
+      ...extra,
       url,
     ],
     { timeoutMs: 10 * 60_000 }
