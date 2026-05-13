@@ -17,3 +17,6 @@ export * from "./settings";
 export * from "./carousel/renderer";
 export * from "./carousel/publishFlow";
 export * from "./publer";
+export * from "./youtube/download";
+export * from "./youtube/transcribe";
+export * from "./youtube/process";

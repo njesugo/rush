@@ -3,21 +3,40 @@ import {
   QUEUE_NAMES,
   getRedis,
   publishJobEvent,
+  downloadSourceVideo,
+  transcribeSourceVideo,
   type YtTranscribeJobData,
 } from "@rush/services";
 import { logger } from "./logger";
 
+/**
+ * Standalone re-transcription path: re-downloads the YouTube video to extract
+ * audio (we don't keep the WAV around), then runs Whisper. The normal flow
+ * (download → transcribe in one shot) is handled by the yt-download worker.
+ */
 async function handle(job: Job<YtTranscribeJobData>): Promise<void> {
-  logger.warn({ jobId: job.id, data: job.data }, "yt-transcribe stub (PR2)");
+  const { sourceVideoId } = job.data;
+  logger.info({ jobId: job.id, sourceVideoId }, "yt-transcribe start");
   await publishJobEvent({
     type: "started",
     queue: QUEUE_NAMES.ytTranscribe,
     jobId: String(job.id),
     kind: "yt-transcribe",
-    payload: job.data ?? {},
+    payload: job.data,
     at: Date.now(),
   });
-  throw new Error("yt-transcribe worker not implemented yet (PR2)");
+
+  const dl = await downloadSourceVideo(sourceVideoId);
+  await transcribeSourceVideo(sourceVideoId, dl.audioPath, dl.workDir);
+
+  logger.info({ jobId: job.id, sourceVideoId }, "yt-transcribe done");
+  await publishJobEvent({
+    type: "completed",
+    queue: QUEUE_NAMES.ytTranscribe,
+    jobId: String(job.id),
+    result: { sourceVideoId, storageKey: dl.storageKey },
+    at: Date.now(),
+  });
 }
 
 export function startYtTranscribeWorker(): Worker<YtTranscribeJobData> {

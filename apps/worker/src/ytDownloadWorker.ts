@@ -3,21 +3,47 @@ import {
   QUEUE_NAMES,
   getRedis,
   publishJobEvent,
+  downloadSourceVideo,
+  transcribeSourceVideo,
   type YtDownloadJobData,
 } from "@rush/services";
 import { logger } from "./logger";
 
-async function handle(job: Job<YtDownloadJobData>): Promise<void> {
-  logger.warn({ jobId: job.id, data: job.data }, "yt-download stub (PR2)");
+/**
+ * Download a YouTube video and transcribe it in one shot. We chain the two
+ * steps inside the same job so we don't have to upload/redownload the WAV.
+ *
+ * The DB row is updated as: pending → downloading → transcribing → ready (or failed).
+ */
+async function handle(job: Job<YtDownloadJobData>): Promise<{ storageKey: string }> {
+  const { sourceVideoId } = job.data;
+  logger.info({ jobId: job.id, sourceVideoId }, "yt-download start");
   await publishJobEvent({
     type: "started",
     queue: QUEUE_NAMES.ytDownload,
     jobId: String(job.id),
     kind: "yt-download",
-    payload: job.data ?? {},
+    payload: job.data,
     at: Date.now(),
   });
-  throw new Error("yt-download worker not implemented yet (PR2)");
+
+  const dl = await downloadSourceVideo(sourceVideoId);
+  logger.info(
+    { jobId: job.id, sourceVideoId, key: dl.storageKey, durationS: dl.durationS },
+    "yt-download uploaded; transcribing"
+  );
+  await transcribeSourceVideo(sourceVideoId, dl.audioPath, dl.workDir);
+
+  logger.info({ jobId: job.id, sourceVideoId }, "yt-download + transcribe done");
+  await publishJobEvent({
+    type: "completed",
+    queue: QUEUE_NAMES.ytDownload,
+    jobId: String(job.id),
+    result: { sourceVideoId, storageKey: dl.storageKey },
+    at: Date.now(),
+  });
+
+  return { storageKey: dl.storageKey };
 }
 
 export function startYtDownloadWorker(): Worker<YtDownloadJobData> {
