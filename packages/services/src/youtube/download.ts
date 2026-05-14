@@ -61,6 +61,10 @@ async function ytExtraArgs(): Promise<string[]> {
   const args: string[] = [];
   const cookies = await getCookiesPath();
   if (cookies) args.push("--cookies", cookies);
+  // Residential / datacenter proxy to avoid YouTube IP bans on Railway egress.
+  // Format: http://user:pass@host:port  (or socks5://...)
+  const proxy = process.env.YT_PROXY?.trim();
+  if (proxy) args.push("--proxy", proxy);
   // bgutil-ytdlp-pot-provider plugin (installed via pip) fetches PO tokens from
   // the pot-provider sidecar. The plugin needs the base_url passed via extractor
   // args (the BGUTIL_POT_PROVIDER_URL env is a convenience for our own code).
