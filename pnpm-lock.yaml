@@ -23,6 +23,9 @@ importers:
       '@remotion/google-fonts':
         specifier: ^4.0.215
         version: 4.0.461(react-dom@19.0.0-rc-66855b96-20241106(react@19.0.0-rc-66855b96-20241106))(react@19.0.0-rc-66855b96-20241106)
+      '@rush/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       react:
         specifier: ^19.0.0-rc-66855b96-20241106
         version: 19.0.0-rc-66855b96-20241106
