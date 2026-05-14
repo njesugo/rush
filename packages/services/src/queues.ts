@@ -15,6 +15,7 @@ export const QUEUE_NAMES = {
   ytTranscribe: "yt-transcribe",
   reelGenerate: "reel-generate",
   reelExtractBroll: "reel-extract-broll",
+  reelRenderRemotion: "reel-render-remotion",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -87,6 +88,11 @@ export interface ReelExtractBrollJobData {
   reelId: number;
 }
 
+/** v2: Whisper VO -> Claude storyboard -> Remotion render -> upload mp4. */
+export interface ReelRenderRemotionJobData {
+  reelId: number;
+}
+
 /* ---------- Queue singletons ---------- */
 const _queues = new Map<string, Queue>();
 
@@ -128,5 +134,7 @@ export const reelGenerateQueue = () =>
   makeQueue<ReelGenerateJobData>(QUEUE_NAMES.reelGenerate);
 export const reelExtractBrollQueue = () =>
   makeQueue<ReelExtractBrollJobData>(QUEUE_NAMES.reelExtractBroll);
+export const reelRenderRemotionQueue = () =>
+  makeQueue<ReelRenderRemotionJobData>(QUEUE_NAMES.reelRenderRemotion);
 
 export type { JobsOptions };

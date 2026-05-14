@@ -186,3 +186,99 @@ function probeDurationS(filePath: string): Promise<number> {
     });
   });
 }
+
+export { probeDurationS };
+
+/* --------------------------------------------------------------------- *
+ * Word-level transcription (used by reels v2 / Remotion pipeline).
+ * Calls Groq Whisper with timestamp_granularities[]=word.
+ * --------------------------------------------------------------------- */
+
+export interface TranscribedWord {
+  word: string;
+  start: number; // seconds, from start of audio
+  end: number;
+}
+
+async function callGroqWords(
+  filePath: string,
+  language?: string
+): Promise<{ words: Array<{ word: string; start: number; end: number }>; duration?: number }> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("GROQ_API_KEY is not set");
+
+  const buf = await fs.readFile(filePath);
+  if (buf.byteLength > GROQ_MAX_BYTES) {
+    throw new Error(`audio too large for Groq (${buf.byteLength} > ${GROQ_MAX_BYTES})`);
+  }
+
+  const form = new FormData();
+  form.append("file", new Blob([buf], { type: "audio/mpeg" }), path.basename(filePath));
+  form.append("model", MODEL);
+  form.append("response_format", "verbose_json");
+  form.append("timestamp_granularities[]", "word");
+  if (language) form.append("language", language);
+
+  const res = await fetch(`${GROQ_BASE}/audio/transcriptions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Groq Whisper ${res.status}: ${txt.slice(0, 300)}`);
+  }
+  const json = (await res.json()) as GroqVerboseResponse;
+  return { words: json.words ?? [], duration: json.duration };
+}
+
+/**
+ * Transcribe a voice-over file with word-level timestamps. Accepts any audio
+ * format ffmpeg can decode (mp3, m4a, wav, ogg, …) — we always re-encode to
+ * mono 16 kHz 64 kbps mp3 first to stay under Groq's 25 MB cap and to ensure
+ * a stable Whisper input.
+ *
+ * Returns words with start/end in seconds + the total audio duration in s.
+ */
+export async function transcribeAudioWords(
+  inputPath: string,
+  opts: TranscribeOptions = {}
+): Promise<{ words: TranscribedWord[]; durationS: number }> {
+  const dir = path.dirname(inputPath);
+  const base = path.basename(inputPath, path.extname(inputPath));
+  const fullMp3 = path.join(dir, `${base}.transcribe.mp3`);
+  await compressToMp3(inputPath, fullMp3);
+
+  const stat = await fs.stat(fullMp3);
+  if (stat.size <= GROQ_MAX_BYTES) {
+    const { words, duration } = await callGroqWords(fullMp3, opts.language);
+    const durationS = duration ?? (await probeDurationS(fullMp3));
+    return {
+      words: words.map((w) => ({ word: w.word, start: w.start, end: w.end })),
+      durationS,
+    };
+  }
+
+  // Chunked path — same logic as transcribeAudio but for words.
+  const durationS = await probeDurationS(fullMp3);
+  const wordsAll: TranscribedWord[] = [];
+  let offset = 0;
+  let idx = 0;
+  while (offset < durationS) {
+    const sliceLen = Math.min(CHUNK_SECONDS, durationS - offset);
+    const slicePath = path.join(dir, `${base}.${idx}.transcribe.mp3`);
+    await sliceMp3(fullMp3, offset, sliceLen, slicePath);
+    const { words } = await callGroqWords(slicePath, opts.language);
+    for (const w of words) {
+      wordsAll.push({
+        word: w.word,
+        start: +(w.start + offset).toFixed(3),
+        end: +(w.end + offset).toFixed(3),
+      });
+    }
+    await fs.rm(slicePath, { force: true });
+    offset += sliceLen;
+    idx += 1;
+  }
+  return { words: wordsAll, durationS };
+}

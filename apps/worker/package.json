@@ -10,6 +10,10 @@
   "dependencies": {
     "@rush/db": "workspace:*",
     "@rush/services": "workspace:*",
+    "@rush/shared": "workspace:*",
+    "@rush/remotion": "workspace:*",
+    "@remotion/bundler": "^4.0.215",
+    "@remotion/renderer": "^4.0.215",
     "@imgly/background-removal-node": "^1.4.5",
     "sharp": "^0.33.5",
     "bullmq": "^5.34.0",

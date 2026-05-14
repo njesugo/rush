@@ -6,8 +6,13 @@ FROM node:20-alpine AS base
 # - yt-dlp + bgutil-ytdlp-pot-provider: PO-token-aware downloader to bypass
 #   YouTube's bot check from datacenter IPs. Calls the pot-provider sidecar
 #   service via the BGUTIL_POT_PROVIDER_URL env var.
+# - chromium + nss/freetype/harfbuzz/ttf-freefont: headless Chrome for
+#   Remotion renders (the worker bundles apps/remotion at runtime).
 RUN apk add --no-cache libc6-compat ffmpeg python3 py3-pip ca-certificates \
+      chromium nss freetype harfbuzz ttf-freefont \
   && pip3 install --break-system-packages --no-cache-dir -U yt-dlp bgutil-ytdlp-pot-provider
+ENV REMOTION_CHROMIUM_PATH=/usr/bin/chromium
+ENV PUPPETEER_SKIP_DOWNLOAD=1
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
@@ -16,6 +21,7 @@ FROM base AS deps
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* ./
 COPY apps/web/package.json apps/web/
 COPY apps/worker/package.json apps/worker/
+COPY apps/remotion/package.json apps/remotion/
 COPY packages/db/package.json packages/db/
 COPY packages/shared/package.json packages/shared/
 COPY packages/services/package.json packages/services/
@@ -29,6 +35,7 @@ ENV BANK_DIR=/data/bank
 COPY --from=deps /app /app
 COPY packages packages
 COPY apps/worker apps/worker
+COPY apps/remotion apps/remotion
 
 # Workspace package sources used by the worker at runtime
 WORKDIR /app

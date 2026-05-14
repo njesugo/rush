@@ -23,3 +23,5 @@ export * from "./youtube/process";
 export * from "./reels/script";
 export * from "./reels/generate";
 export * from "./reels/extractBroll";
+export * from "./reels/generateRemotionStoryboard";
+export * from "./reels/renderRemotion";

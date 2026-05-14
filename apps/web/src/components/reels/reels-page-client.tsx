@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Loader2, Plus, RefreshCw, Trash2, X, Film } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2, X, Film, Download } from "lucide-react";
 import { useJobsStream } from "@/lib/use-jobs-stream";
 import { cn } from "@/lib/utils";
 
@@ -15,13 +15,15 @@ type ReelStatus =
   | "ready"
   | "broll_rendering"
   | "broll_ready"
+  | "remotion_rendering"
+  | "remotion_ready"
   | "failed";
 
 interface ReelListItem {
   id: number;
   title: string | null;
-  youtubeUrl: string;
-  angle: string;
+  youtubeUrl: string | null;
+  angle: string | null;
   sourceVideoId: number | null;
   hook: string | null;
   status: ReelStatus;
@@ -39,6 +41,8 @@ const STATUS_LABEL: Record<ReelStatus, string> = {
   ready: "Script prêt",
   broll_rendering: "B-roll en cours…",
   broll_ready: "B-roll prêt",
+  remotion_rendering: "Rendu Remotion…",
+  remotion_ready: "MP4 prêt",
   failed: "Échoué",
 };
 
@@ -50,6 +54,8 @@ const STATUS_CLASS: Record<ReelStatus, string> = {
   ready: "bg-accent/10 text-accent",
   broll_rendering: "bg-blue-500/10 text-blue-600",
   broll_ready: "bg-green-500/10 text-green-600",
+  remotion_rendering: "bg-blue-500/10 text-blue-600",
+  remotion_ready: "bg-green-500/10 text-green-600",
   failed: "bg-red-500/10 text-red-600",
 };
 
@@ -97,6 +103,20 @@ export function ReelsPageClient() {
       return;
     }
     setItems((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  async function handleDownloadMp4(id: number) {
+    try {
+      const res = await fetch(`/api/reels/${id}/render-url`);
+      if (!res.ok) {
+        toast.error("MP4 indisponible");
+        return;
+      }
+      const { url } = (await res.json()) as { url: string };
+      window.open(url, "_blank");
+    } catch {
+      toast.error("Erreur de téléchargement");
+    }
   }
 
   return (
@@ -161,9 +181,9 @@ export function ReelsPageClient() {
                       >
                         {it.hook || it.title || `Reel #${it.id}`}
                       </Link>
-                      <div className="truncate text-xs text-text-muted">{it.youtubeUrl}</div>
+                      <div className="truncate text-xs text-text-muted">{it.youtubeUrl ?? "—"}</div>
                     </td>
-                    <td className="max-w-xs truncate px-4 py-3 text-text-body">{it.angle}</td>
+                    <td className="max-w-xs truncate px-4 py-3 text-text-body">{it.angle ?? "—"}</td>
                     <td className="px-4 py-3">
                       <span
                         className={cn(
@@ -174,7 +194,8 @@ export function ReelsPageClient() {
                         {(it.status === "downloading" ||
                           it.status === "transcribing" ||
                           it.status === "generating" ||
-                          it.status === "broll_rendering") && (
+                          it.status === "broll_rendering" ||
+                          it.status === "remotion_rendering") && (
                           <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} />
                         )}
                         {STATUS_LABEL[it.status]}
@@ -197,6 +218,15 @@ export function ReelsPageClient() {
                       })}
                     </td>
                     <td className="px-4 py-3 text-right">
+                      {it.status === "remotion_ready" && (
+                        <button
+                          onClick={() => void handleDownloadMp4(it.id)}
+                          className="mr-1 rounded p-1 text-text-muted hover:bg-surface-2 hover:text-accent"
+                          title="Télécharger le MP4"
+                        >
+                          <Download className="h-4 w-4" strokeWidth={1.5} />
+                        </button>
+                      )}
                       <button
                         onClick={() => void handleDelete(it.id)}
                         className="rounded p-1 text-text-muted hover:bg-surface-2 hover:text-red-500"

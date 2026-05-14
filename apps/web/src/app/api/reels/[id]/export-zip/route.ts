@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 function buildScriptMd(args: {
   title: string | null;
-  angle: string;
+  angle: string | null;
   hook: string;
   blocks: ReelBlock[];
 }): string {
@@ -19,7 +19,7 @@ function buildScriptMd(args: {
   const lines: string[] = [];
   lines.push(`# ${title?.trim() || "Reel"}`);
   lines.push("");
-  lines.push(`**Angle :** ${angle}`);
+  lines.push(`**Angle :** ${angle ?? "(none)"}`);
   lines.push("");
   lines.push(`## Hook`);
   lines.push(hook);

@@ -25,6 +25,8 @@ type ReelStatus =
   | "ready"
   | "broll_rendering"
   | "broll_ready"
+  | "remotion_rendering"
+  | "remotion_ready"
   | "failed";
 
 interface TranscriptSegment {
@@ -49,8 +51,8 @@ interface ReelStoryboard {
 interface ReelDetail {
   id: number;
   title: string | null;
-  youtubeUrl: string;
-  angle: string;
+  youtubeUrl: string | null;
+  angle: string | null;
   sourceVideoId: number | null;
   storyboard: ReelStoryboard | null;
   hook: string | null;
@@ -79,6 +81,8 @@ const STATUS_LABEL: Record<ReelStatus, string> = {
   ready: "Script prêt",
   broll_rendering: "B-roll en cours…",
   broll_ready: "B-roll prêt",
+  remotion_rendering: "Rendu Remotion…",
+  remotion_ready: "MP4 prêt",
   failed: "Échoué",
 };
 const STATUS_CLASS: Record<ReelStatus, string> = {
@@ -89,6 +93,8 @@ const STATUS_CLASS: Record<ReelStatus, string> = {
   ready: "bg-accent/10 text-accent",
   broll_rendering: "bg-blue-500/10 text-blue-600",
   broll_ready: "bg-green-500/10 text-green-600",
+  remotion_rendering: "bg-blue-500/10 text-blue-600",
+  remotion_ready: "bg-green-500/10 text-green-600",
   failed: "bg-red-500/10 text-red-600",
 };
 
@@ -246,14 +252,16 @@ export function ReelDetailClient({ reelId }: { reelId: number }) {
             {reel.title || reel.hook || `Reel #${reel.id}`}
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-text-muted">
-            <a
-              href={reel.youtubeUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="truncate hover:text-accent"
-            >
-              {reel.youtubeUrl}
-            </a>
+            {reel.youtubeUrl ? (
+              <a
+                href={reel.youtubeUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="truncate hover:text-accent"
+              >
+                {reel.youtubeUrl}
+              </a>
+            ) : null}
             {sourceVideo && (
               <span>
                 · {sourceVideo.channel} · {sourceVideo.durationS ? fmt(sourceVideo.durationS) : "?"}

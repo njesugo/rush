@@ -359,6 +359,8 @@ export type ReelStatus =
   | "ready"            // storyboard available, user can edit
   | "broll_rendering"  // ffmpeg extracting clips
   | "broll_ready"      // clips on supabase, zip downloadable
+  | "remotion_rendering" // v2: Remotion render in progress
+  | "remotion_ready"     // v2: mp4 uploaded, downloadable
   | "failed";
 
 export const reels = pgTable(
@@ -366,8 +368,8 @@ export const reels = pgTable(
   {
     id: serial("id").primaryKey(),
     title: text("title"),
-    youtubeUrl: text("youtube_url").notNull(),
-    angle: text("angle").notNull(),
+    youtubeUrl: text("youtube_url"),
+    angle: text("angle"),
     sourceVideoId: integer("source_video_id").references(() => sourceVideos.id, {
       onDelete: "set null",
     }),
@@ -376,6 +378,17 @@ export const reels = pgTable(
     hook: text("hook"),
     /** Storage keys of extracted b-roll clips (one per block, ordered). */
     brollKeys: jsonb("broll_keys").$type<Array<string | null>>().default([]),
+    /* ----- v2 (Remotion) fields ----- */
+    /** User-authored script (raw text input on /api/reels/v2). */
+    script: text("script"),
+    /** Storage key (Supabase) of the user's voice-over audio. */
+    voiceStorageKey: text("voice_storage_key"),
+    /** Public URLs of uploaded screenshots, ordered (matches storyboardV2.assets.screenshots). */
+    screenshotKeys: jsonb("screenshot_keys").$type<string[]>().default([]),
+    /** v2 storyboard JSON (Remotion-oriented). Schema = `@rush/shared`#`storyboardSchema`. */
+    storyboardV2: jsonb("storyboard_v2").$type<unknown>(),
+    /** Storage key of the rendered mp4 (set by remotion render worker). */
+    renderedVideoKey: text("rendered_video_key"),
     status: text("status").$type<ReelStatus>().default("draft").notNull(),
     error: text("error"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
