@@ -2,7 +2,11 @@
 # ---- Web (Next.js standalone) ----
 FROM node:20-alpine AS base
 # yt-dlp + python3 are needed by `probeYoutube` (sync probe in POST /api/reels).
-RUN apk add --no-cache libc6-compat yt-dlp python3
+# Install latest yt-dlp from GitHub release — the alpine package is too old
+# and YouTube's anti-bot rejects it.
+RUN apk add --no-cache libc6-compat python3 ca-certificates wget \
+  && wget -qO /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+  && chmod +x /usr/local/bin/yt-dlp
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
@@ -25,7 +29,9 @@ RUN pnpm --filter @rush/web build
 
 # --- runtime: minimal image ---
 FROM node:20-alpine AS runner
-RUN apk add --no-cache libc6-compat yt-dlp python3
+RUN apk add --no-cache libc6-compat python3 ca-certificates wget \
+  && wget -qO /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+  && chmod +x /usr/local/bin/yt-dlp
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
