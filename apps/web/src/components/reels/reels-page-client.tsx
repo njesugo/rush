@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Loader2, Plus, RefreshCw, Trash2, X, Film, Download } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2, X, Film, Download, Sparkles } from "lucide-react";
 import { useJobsStream } from "@/lib/use-jobs-stream";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +63,7 @@ export function ReelsPageClient() {
   const [items, setItems] = React.useState<ReelListItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [showNew, setShowNew] = React.useState(false);
+  const [showNewV2, setShowNewV2] = React.useState(false);
 
   const fetchItems = React.useCallback(async () => {
     try {
@@ -139,10 +140,17 @@ export function ReelsPageClient() {
           </button>
           <button
             onClick={() => setShowNew(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover"
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm hover:border-border-hover hover:bg-surface-2"
           >
             <Plus className="h-4 w-4" strokeWidth={1.5} />
             Nouveau reel
+          </button>
+          <button
+            onClick={() => setShowNewV2(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover"
+          >
+            <Sparkles className="h-4 w-4" strokeWidth={1.5} />
+            Nouveau reel v2
           </button>
         </div>
       </header>
@@ -248,6 +256,15 @@ export function ReelsPageClient() {
           onClose={() => setShowNew(false)}
           onCreated={() => {
             setShowNew(false);
+            void fetchItems();
+          }}
+        />
+      )}
+      {showNewV2 && (
+        <NewReelV2Modal
+          onClose={() => setShowNewV2(false)}
+          onCreated={() => {
+            setShowNewV2(false);
             void fetchItems();
           }}
         />
@@ -363,6 +380,161 @@ function NewReelModal({
             >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />}
               Créer
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function NewReelV2Modal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (id: number) => void;
+}) {
+  const [script, setScript] = React.useState("");
+  const [topic, setTopic] = React.useState("");
+  const [title, setTitle] = React.useState("");
+  const [voice, setVoice] = React.useState<File | null>(null);
+  const [screenshots, setScreenshots] = React.useState<File[]>([]);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const canSubmit =
+    script.trim().length > 0 && voice !== null && screenshots.length > 0 && !submitting;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSubmitting(true);
+    try {
+      const fd = new FormData();
+      fd.append("script", script.trim());
+      if (topic.trim()) fd.append("topic", topic.trim());
+      if (title.trim()) fd.append("title", title.trim());
+      if (voice) fd.append("voice", voice);
+      for (const f of screenshots) fd.append("screenshots", f);
+
+      const res = await fetch("/api/reels/v2", { method: "POST", body: fd });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(json.error || "Échec création v2");
+        return;
+      }
+      toast.success("Reel v2 créé · rendu Remotion en cours");
+      onCreated(json.id);
+    } catch (err) {
+      toast.error((err as Error).message || "Échec upload");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-surface p-6 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Nouveau reel v2 · Remotion</h2>
+          <button
+            onClick={onClose}
+            className="rounded p-1 text-text-muted hover:bg-surface-2"
+            disabled={submitting}
+          >
+            <X className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              Script (texte parlé)
+            </label>
+            <textarea
+              autoFocus
+              value={script}
+              onChange={(e) => setScript(e.target.value)}
+              placeholder="Le texte exact que tu dis dans la voice-over."
+              required
+              rows={5}
+              className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              Voice-over (mp3/m4a/wav)
+            </label>
+            <input
+              type="file"
+              accept="audio/*"
+              onChange={(e) => setVoice(e.target.files?.[0] ?? null)}
+              required
+              className="block w-full text-sm file:mr-3 file:rounded-md file:border file:border-border file:bg-surface-2 file:px-3 file:py-1.5 file:text-sm hover:file:bg-surface"
+            />
+            {voice && (
+              <p className="mt-1 text-xs text-text-muted">
+                {voice.name} · {(voice.size / 1024 / 1024).toFixed(2)} MB
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              Screenshots (1 à 12, ordre = affichage)
+            </label>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              onChange={(e) => setScreenshots(Array.from(e.target.files ?? []))}
+              required
+              className="block w-full text-sm file:mr-3 file:rounded-md file:border file:border-border file:bg-surface-2 file:px-3 file:py-1.5 file:text-sm hover:file:bg-surface"
+            />
+            {screenshots.length > 0 && (
+              <p className="mt-1 text-xs text-text-muted">
+                {screenshots.length} fichier(s) sélectionné(s)
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              Topic / hint (optionnel)
+            </label>
+            <input
+              type="text"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="Ex : Claude Cowork pour devs seniors"
+              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-text-muted">
+              Titre interne (optionnel)
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Brouillon interne"
+              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm focus:border-accent focus:outline-none"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting}
+              className="rounded-md border border-border bg-surface px-4 py-2 text-sm hover:border-border-hover hover:bg-surface-2"
+            >
+              Annuler
+            </button>
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:opacity-50"
+            >
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} />}
+              Lancer le rendu
             </button>
           </div>
         </form>
