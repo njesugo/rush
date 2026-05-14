@@ -66,6 +66,10 @@ export async function generateReelStoryboard(reelId: number): Promise<ReelStoryb
     throw new Error(`source_video ${sv.id} has invalid durationS`);
   }
 
+  if (!reel.angle) {
+    throw new Error(`reel ${reelId} has no angle (legacy v1 generate flow)`);
+  }
+
   await setReelStatus(reelId, "generating", { error: null });
 
   try {
