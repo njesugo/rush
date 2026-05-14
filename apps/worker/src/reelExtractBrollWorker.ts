@@ -14,7 +14,7 @@ async function handle(job: Job<ReelExtractBrollJobData>): Promise<void> {
   await publishJobEvent({
     type: "started",
     queue: QUEUE_NAMES.reelExtractBroll,
-    jobId: String(job.id),
+    jobId: String(job.id), 
     kind: "reel-extract-broll",
     payload: { reelId },
     at: Date.now(),
