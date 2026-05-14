@@ -3,11 +3,11 @@
 FROM node:20-alpine AS base
 # - libc6-compat: required by some native node deps (sharp, canvas, ...)
 # - ffmpeg: used by carousel renderer + reel B-roll extraction
-# - yt-dlp (latest from GitHub, the apk version is too old for current YouTube)
-# - python3: yt-dlp runtime
-RUN apk add --no-cache libc6-compat ffmpeg python3 ca-certificates wget \
-  && wget -qO /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
-  && chmod +x /usr/local/bin/yt-dlp
+# - yt-dlp + bgutil-ytdlp-pot-provider: PO-token-aware downloader to bypass
+#   YouTube's bot check from datacenter IPs. Calls the pot-provider sidecar
+#   service via the BGUTIL_POT_PROVIDER_URL env var.
+RUN apk add --no-cache libc6-compat ffmpeg python3 py3-pip ca-certificates \
+  && pip3 install --break-system-packages --no-cache-dir -U yt-dlp bgutil-ytdlp-pot-provider
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 

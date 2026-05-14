@@ -61,12 +61,11 @@ async function ytExtraArgs(): Promise<string[]> {
   const args: string[] = [];
   const cookies = await getCookiesPath();
   if (cookies) args.push("--cookies", cookies);
-  // tv_embedded + mweb player clients bypass YouTube's bot check from datacenter
-  // IPs (where the standard `web` client gets "sign in to confirm you're not a
-  // bot"). They also work without valid cookies.
+  // The bgutil-ytdlp-pot-provider plugin (installed via pip in the Docker image)
+  // automatically fetches Proof-of-Origin tokens from the pot-provider sidecar
+  // service (URL via BGUTIL_POT_PROVIDER_URL env var), which bypasses YouTube's
+  // bot check from datacenter IPs.
   args.push(
-    "--extractor-args",
-    "youtube:player_client=tv_embedded,mweb,android",
     "--user-agent",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
   );

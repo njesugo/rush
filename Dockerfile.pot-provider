@@ -1,0 +1,6 @@
+# Sidecar service: bgutil-ytdlp-pot-provider
+# Generates Proof-of-Origin (PO) tokens that yt-dlp needs to bypass
+# YouTube's bot check from datacenter IPs.
+# https://github.com/Brainicism/bgutil-ytdlp-pot-provider
+FROM brainicism/bgutil-ytdlp-pot-provider:latest
+EXPOSE 4416

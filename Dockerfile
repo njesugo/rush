@@ -2,11 +2,10 @@
 # ---- Web (Next.js standalone) ----
 FROM node:20-alpine AS base
 # yt-dlp + python3 are needed by `probeYoutube` (sync probe in POST /api/reels).
-# Install latest yt-dlp from GitHub release — the alpine package is too old
-# and YouTube's anti-bot rejects it.
-RUN apk add --no-cache libc6-compat python3 ca-certificates wget \
-  && wget -qO /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
-  && chmod +x /usr/local/bin/yt-dlp
+# Install yt-dlp + bgutil-ytdlp-pot-provider plugin via pip so we can use the
+# Proof-of-Origin token sidecar to bypass YouTube's bot check from datacenter IPs.
+RUN apk add --no-cache libc6-compat python3 py3-pip ca-certificates \
+  && pip3 install --break-system-packages --no-cache-dir -U yt-dlp bgutil-ytdlp-pot-provider
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
@@ -29,9 +28,8 @@ RUN pnpm --filter @rush/web build
 
 # --- runtime: minimal image ---
 FROM node:20-alpine AS runner
-RUN apk add --no-cache libc6-compat python3 ca-certificates wget \
-  && wget -qO /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
-  && chmod +x /usr/local/bin/yt-dlp
+RUN apk add --no-cache libc6-compat python3 py3-pip ca-certificates \
+  && pip3 install --break-system-packages --no-cache-dir -U yt-dlp bgutil-ytdlp-pot-provider
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
