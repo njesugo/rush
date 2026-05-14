@@ -61,10 +61,13 @@ async function ytExtraArgs(): Promise<string[]> {
   const args: string[] = [];
   const cookies = await getCookiesPath();
   if (cookies) args.push("--cookies", cookies);
-  // The bgutil-ytdlp-pot-provider plugin (installed via pip in the Docker image)
-  // automatically fetches Proof-of-Origin tokens from the pot-provider sidecar
-  // service (URL via BGUTIL_POT_PROVIDER_URL env var), which bypasses YouTube's
-  // bot check from datacenter IPs.
+  // bgutil-ytdlp-pot-provider plugin (installed via pip) fetches PO tokens from
+  // the pot-provider sidecar. The plugin needs the base_url passed via extractor
+  // args (the BGUTIL_POT_PROVIDER_URL env is a convenience for our own code).
+  const potUrl = process.env.BGUTIL_POT_PROVIDER_URL;
+  if (potUrl) {
+    args.push("--extractor-args", `youtubepot-bgutilhttp:base_url=${potUrl}`);
+  }
   args.push(
     "--user-agent",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
