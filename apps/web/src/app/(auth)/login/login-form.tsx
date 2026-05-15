@@ -26,18 +26,20 @@ export function LoginForm({
     const email = String(fd.get("email") ?? "");
     const password = String(fd.get("password") ?? "");
 
-    startTransition(async () => {
-      const res = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
-      if (!res || res.error) {
-        setError("Identifiants invalides");
-        return;
-      }
-      router.push(callbackUrl);
-      router.refresh();
+    startTransition(() => {
+      void (async () => {
+        const res = await signIn("credentials", {
+          email,
+          password,
+          redirect: false,
+        });
+        if (!res || res.error) {
+          setError("Identifiants invalides");
+          return;
+        }
+        router.push(callbackUrl);
+        router.refresh();
+      })();
     });
   }
 
