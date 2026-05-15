@@ -3,159 +3,481 @@
  *
  * Each template returns the surrounding content for a single "cut" of the
  * viral text-match-cut effect. The anchor word is rendered as a separate,
- * pixel-locked layer by the Remotion composition; templates only fill the
- * variable space ABOVE and BELOW the anchor.
+ * pixel-locked layer by the Remotion composition; templates fill the page
+ * top-to-bottom with dense text, and place the anchor INLINE on the middle
+ * line via `inlinePrefix` / `inlineSuffix`.
  *
- * Variety is the goal: titles, paragraph styles, lists, quotes, columns —
- * the eye should feel it's flipping through different documents while the
- * single highlighted word stays nailed in place.
+ * Lines should be short (≈ 10-18 chars). Long lines bleed off the edges,
+ * which is part of the intended look.
  */
 
 import type { TextCutFrame, TextCutLanguage } from "@rush/db";
 
 type TemplateFn = (word: string) => TextCutFrame;
 
-/* ------------------------------------------------------------------------- */
-/* FR templates                                                              */
-/* ------------------------------------------------------------------------- */
+/* Each cut has 6 lines above + anchor line + 6 lines below = 13 visible rows. */
 
 const FR_TEMPLATES: TemplateFn[] = [
-  // 1. Article de dictionnaire
-  (w) => ({
-    title: `${w}, n.m.`,
-    before: "Du latin classique. Premier emploi attesté en 1690 dans les",
-    after: `dictionnaires de l'époque. Synonymes proches : forme, idée, principe.`,
-    layout: "paragraph",
+  // 1. Roman / chapitre
+  () => ({
+    layout: "novel",
+    linesAbove: [
+      "Elle relut la",
+      "lettre une",
+      "dernière fois.",
+      "Le mot revenait",
+      "sans cesse,",
+      "comme un",
+    ],
+    inlinePrefix: "battement",
+    inlineSuffix: "lancinant",
+    linesBelow: [
+      "qu'elle ne",
+      "pouvait plus",
+      "chasser de sa",
+      "tête. Dehors,",
+      "il pleuvait",
+      "sur les tuiles.",
+    ],
   }),
-  // 2. Extrait roman
-  (w) => ({
-    title: "Chapitre VII",
-    before: `Elle relut la lettre une dernière fois. Le mot revenait sans cesse, comme un`,
-    after: `lancinant qu'elle ne pouvait plus chasser. Il pleuvait sur les tuiles.`,
-    layout: "paragraph",
+
+  // 2. Article / dictionnaire
+  () => ({
+    layout: "press",
+    linesAbove: [
+      "Du latin",
+      "classique,",
+      "premier emploi",
+      "attesté en 1690",
+      "dans les",
+      "ouvrages de",
+    ],
+    inlinePrefix: "référence,",
+    inlineSuffix: "désigne",
+    linesBelow: [
+      "depuis lors",
+      "l'ensemble des",
+      "phénomènes",
+      "associés à la",
+      "perception, la",
+      "mémoire et l'",
+    ],
   }),
-  // 3. Article Wikipédia-like
-  (w) => ({
-    title: "Article",
-    before: "Selon plusieurs sources, le concept est documenté dès l'Antiquité tardive et concerne",
-    after: "l'ensemble des phénomènes liés à la perception, la mémoire et l'attention.",
-    layout: "paragraph",
+
+  // 3. Manuscrit médiéval
+  () => ({
+    layout: "manuscript",
+    linesAbove: [
+      "Et estoit là",
+      "escript en",
+      "lettres d'or",
+      "sur le vieux",
+      "parchemin, le",
+      "très grand et",
+    ],
+    inlinePrefix: "très saint",
+    inlineSuffix: "que",
+    linesBelow: [
+      "nul homme ne",
+      "pouvoit dire",
+      "à voix haulte",
+      "sans en frémir",
+      "d'aise et de",
+      "crainte aussi.",
+    ],
   }),
-  // 4. Liste à puces
-  (w) => ({
-    title: "Trois choses à retenir",
-    before: "• Toujours commencer par l'essentiel\n• Ne jamais oublier le",
-    after: "• Et savoir reconnaître quand s'arrêter",
-    layout: "list",
+
+  // 4. Édito presse
+  () => ({
+    layout: "press",
+    linesAbove: [
+      "Disons-le",
+      "franchement :",
+      "on a perdu",
+      "depuis un",
+      "moment déjà",
+      "le sens du mot",
+    ],
+    inlinePrefix: "et du",
+    inlineSuffix: "principe",
+    linesBelow: [
+      "qui allait avec,",
+      "et c'est sans",
+      "doute ce qui",
+      "explique tout",
+      "le reste, à y",
+      "bien repenser.",
+    ],
   }),
-  // 5. Citation
-  (w) => ({
-    title: null,
-    before: `« Au commencement était le`,
-    after: `», disait-il en souriant. Personne ne sut jamais s'il plaisantait.`,
-    layout: "quote",
+
+  // 5. Note marginale, tapuscrit
+  () => ({
+    layout: "typewriter",
+    linesAbove: [
+      "Note (encre",
+      "bleue, en marge)",
+      "demander à Marie",
+      "ce qu'elle",
+      "entend exactement",
+      "par ce drôle de",
+    ],
+    inlinePrefix: "petit",
+    inlineSuffix: "qu'elle",
+    linesBelow: [
+      "emploie sans",
+      "cesse depuis",
+      "quelques mois",
+      "comme si nous",
+      "devions tous",
+      "savoir d'avance.",
+    ],
   }),
-  // 6. Mode d'emploi
-  (w) => ({
-    title: "Mode d'emploi",
-    before: "Étape 3. Localisez la zone marquée et identifiez le",
-    after: "principal avant de poursuivre l'assemblage selon le schéma joint.",
-    layout: "paragraph",
+
+  // 6. Marginalia poétique
+  () => ({
+    layout: "marginalia",
+    linesAbove: [
+      "Au commencement",
+      "il y avait",
+      "le silence,",
+      "puis vint enfin",
+      "la lumière, puis",
+      "tout doucement",
+    ],
+    inlinePrefix: "vint le",
+    inlineSuffix: "—",
+    linesBelow: [
+      "et tout le",
+      "reste découla",
+      "de cette",
+      "première petite",
+      "syllabe que nul",
+      "n'osa répéter.",
+    ],
   }),
-  // 7. Colonne presse
-  (w) => ({
-    title: "Édito du jour",
-    before: "Disons-le franchement : on a perdu le sens du",
-    after: "et c'est probablement ce qui explique tout le reste, à y regarder de près.",
-    layout: "columns",
+
+  // 7. Mode d'emploi
+  () => ({
+    layout: "typewriter",
+    linesAbove: [
+      "ÉTAPE 3.",
+      "Localisez la",
+      "zone marquée",
+      "d'un trait jaune",
+      "et identifiez",
+      "soigneusement",
+    ],
+    inlinePrefix: "le",
+    inlineSuffix: "principal",
+    linesBelow: [
+      "avant de",
+      "poursuivre",
+      "l'assemblage",
+      "selon le schéma",
+      "joint à la fin",
+      "du présent livret.",
+    ],
   }),
-  // 8. Manuscrit ancien
-  (w) => ({
-    title: "Manuscrit, fol. 12r",
-    before: "Et estoit là escript en lettres d'or le mot",
-    after: "que nul homme ne pouvoit prononcer sans en frémir d'aise et de crainte.",
-    layout: "paragraph",
+
+  // 8. Carnet intime
+  () => ({
+    layout: "novel",
+    linesAbove: [
+      "Je n'ai jamais",
+      "bien compris",
+      "d'où venait,",
+      "au juste, cette",
+      "récente",
+      "obsession pour",
+    ],
+    inlinePrefix: "le",
+    inlineSuffix: "qui revient",
+    linesBelow: [
+      "tous les soirs",
+      "dans mes rêves",
+      "et que je",
+      "n'arrive jamais",
+      "tout à fait,",
+      "moi, à dire.",
+    ],
   }),
-  // 9. Recette
-  (w) => ({
-    title: "Recette familiale",
-    before: "Ajoutez progressivement, en remuant doucement, le",
-    after: "que vous aurez préalablement réservé. Cuisson : 12 minutes à feu doux.",
-    layout: "list",
+
+  // 9. Sermon
+  () => ({
+    layout: "press",
+    linesAbove: [
+      "Mes chers amis,",
+      "je vous le dis",
+      "ce soir avec",
+      "la plus grande",
+      "des fermetés :",
+      "le véritable",
+    ],
+    inlinePrefix: "et noble",
+    inlineSuffix: "n'est",
+    linesBelow: [
+      "pas là où vous",
+      "le cherchez, ni",
+      "là où vous le",
+      "croyez tous,",
+      "sans la moindre",
+      "des exceptions.",
+    ],
   }),
-  // 10. Note marginale
-  (w) => ({
-    title: null,
-    before: "Note (en marge, encre bleue) — penser à demander à Marie ce qu'elle entend exactement par",
-    after: ". Elle ne l'a jamais vraiment expliqué et c'est étrange.",
-    layout: "paragraph",
+
+  // 10. Recette
+  () => ({
+    layout: "typewriter",
+    linesAbove: [
+      "Ajoutez",
+      "progressivement,",
+      "en remuant",
+      "doucement, le",
+      "fameux et très",
+      "ancien petit",
+    ],
+    inlinePrefix: "petit",
+    inlineSuffix: "que",
+    linesBelow: [
+      "vous aurez bien",
+      "réservé. Cuisson",
+      "douze minutes",
+      "à feu doux puis",
+      "laissez reposer",
+      "cinq minutes.",
+    ],
   }),
 ];
 
-/* ------------------------------------------------------------------------- */
-/* EN templates                                                              */
-/* ------------------------------------------------------------------------- */
-
 const EN_TEMPLATES: TemplateFn[] = [
-  (w) => ({
-    title: `${w}, noun`,
-    before: "From Old French, attested since the late 14th century. Often used to describe",
-    after: "the underlying form, pattern, or guiding principle of something larger.",
-    layout: "paragraph",
+  // 1. Novel chapter
+  () => ({
+    layout: "novel",
+    linesAbove: [
+      "She read the",
+      "letter again,",
+      "very slowly.",
+      "The word kept",
+      "coming back,",
+      "a stubborn",
+    ],
+    inlinePrefix: "little",
+    inlineSuffix: "she",
+    linesBelow: [
+      "could not push",
+      "out of her",
+      "head. Outside,",
+      "it was raining",
+      "softly on the",
+      "old grey slates.",
+    ],
   }),
-  (w) => ({
-    title: "Chapter VII",
-    before: "She read the letter again. The word kept coming back, a stubborn little",
-    after: "she could not push out of her head. Outside, it was raining on the slates.",
-    layout: "paragraph",
+
+  // 2. Dictionary article
+  () => ({
+    layout: "press",
+    linesAbove: [
+      "From Old French,",
+      "attested since",
+      "the late 14th",
+      "century. Often",
+      "used loosely",
+      "to describe the",
+    ],
+    inlinePrefix: "deeper",
+    inlineSuffix: "or pattern",
+    linesBelow: [
+      "underlying any",
+      "given thing,",
+      "any system, or",
+      "any form of",
+      "human or natural",
+      "organisation.",
+    ],
   }),
-  (w) => ({
-    title: "Article",
-    before: "According to several sources, the concept has been documented since late antiquity, encompassing",
-    after: "all phenomena tied to perception, memory and attention in the broader sense.",
-    layout: "paragraph",
+
+  // 3. Manuscript
+  () => ({
+    layout: "manuscript",
+    linesAbove: [
+      "And ther was",
+      "writ in letres",
+      "of gold up on",
+      "the parchemyn",
+      "wel and faire,",
+      "the gret and",
+    ],
+    inlinePrefix: "holy",
+    inlineSuffix: "which",
+    linesBelow: [
+      "no man durste",
+      "speke aloude",
+      "withouten gret",
+      "tremblynge of",
+      "soule and of",
+      "his hooly herte.",
+    ],
   }),
-  (w) => ({
-    title: "Three things to remember",
-    before: "• Always lead with what matters\n• Never forget the",
-    after: "• And know when to stop talking",
-    layout: "list",
+
+  // 4. Editorial
+  () => ({
+    layout: "press",
+    linesAbove: [
+      "Let us be",
+      "honest about",
+      "this for once:",
+      "we have lost,",
+      "somewhere along",
+      "the way, the",
+    ],
+    inlinePrefix: "very",
+    inlineSuffix: "and that",
+    linesBelow: [
+      "probably",
+      "explains every-",
+      "thing else once",
+      "you start to",
+      "look at it all",
+      "a little closer.",
+    ],
   }),
-  (w) => ({
-    title: null,
-    before: `"In the beginning was the`,
-    after: `," he would say, smiling. No one ever quite knew whether he was joking.`,
-    layout: "quote",
+
+  // 5. Margin note
+  () => ({
+    layout: "typewriter",
+    linesAbove: [
+      "Note (margin,",
+      "blue ink) —",
+      "ask Marie what",
+      "she actually",
+      "means by this",
+      "strange little",
+    ],
+    inlinePrefix: "tiny",
+    inlineSuffix: "she keeps",
+    linesBelow: [
+      "using over and",
+      "over again as",
+      "if we were all",
+      "supposed to",
+      "know what she",
+      "really means.",
+    ],
   }),
-  (w) => ({
-    title: "Instructions",
-    before: "Step 3. Locate the marked area and identify the main",
-    after: "before continuing the assembly as shown in the attached diagram.",
-    layout: "paragraph",
+
+  // 6. Marginalia
+  () => ({
+    layout: "marginalia",
+    linesAbove: [
+      "In the very",
+      "beginning there",
+      "was only the",
+      "silence, then",
+      "came the light,",
+      "and then, last,",
+    ],
+    inlinePrefix: "came the",
+    inlineSuffix: "—",
+    linesBelow: [
+      "and from this",
+      "single very",
+      "small first",
+      "syllable, the",
+      "rest of the",
+      "world unfolded.",
+    ],
   }),
-  (w) => ({
-    title: "Today's editorial",
-    before: "Let's be honest about it: we have lost any real sense of the",
-    after: "and that probably explains everything else once you start to look closely.",
-    layout: "columns",
+
+  // 7. Instructions
+  () => ({
+    layout: "typewriter",
+    linesAbove: [
+      "STEP 3.",
+      "Locate the",
+      "marked area on",
+      "the diagram",
+      "and identify",
+      "the main",
+    ],
+    inlinePrefix: "central",
+    inlineSuffix: "before",
+    linesBelow: [
+      "continuing the",
+      "assembly as",
+      "shown on the",
+      "attached fold-",
+      "out diagram",
+      "at the end.",
+    ],
   }),
-  (w) => ({
-    title: "Manuscript, fol. 12r",
-    before: "And ther was writ in letres of gold the word",
-    after: "which no man durste speke aloude withouten gret tremblynge.",
-    layout: "paragraph",
+
+  // 8. Diary
+  () => ({
+    layout: "novel",
+    linesAbove: [
+      "I have never",
+      "quite understood",
+      "where it comes",
+      "from, this",
+      "recent silly",
+      "obsession with",
+    ],
+    inlinePrefix: "the",
+    inlineSuffix: "that comes",
+    linesBelow: [
+      "back every",
+      "single night",
+      "into my dreams",
+      "and that I can",
+      "never really",
+      "properly say.",
+    ],
   }),
-  (w) => ({
-    title: "Family recipe",
-    before: "Slowly stir in, a little at a time, the",
-    after: "you set aside earlier. Bake for 12 minutes on low heat.",
-    layout: "list",
+
+  // 9. Sermon
+  () => ({
+    layout: "press",
+    linesAbove: [
+      "My dear",
+      "friends, I",
+      "tell you this",
+      "evening with",
+      "the very",
+      "greatest of",
+    ],
+    inlinePrefix: "true",
+    inlineSuffix: "is not",
+    linesBelow: [
+      "where you are",
+      "looking for",
+      "it, nor where",
+      "you all so",
+      "easily believe",
+      "it must be.",
+    ],
   }),
-  (w) => ({
-    title: null,
-    before: "Note (margin, blue ink) — ask Marie what she actually means by",
-    after: ". She has never really explained it and that is strange.",
-    layout: "paragraph",
+
+  // 10. Recipe
+  () => ({
+    layout: "typewriter",
+    linesAbove: [
+      "Slowly stir",
+      "in, a little",
+      "bit at a time,",
+      "the famous and",
+      "very old little",
+      "secret family",
+    ],
+    inlinePrefix: "secret",
+    inlineSuffix: "you",
+    linesBelow: [
+      "will have set",
+      "carefully aside",
+      "earlier. Bake",
+      "for twelve",
+      "minutes on a",
+      "very low heat.",
+    ],
   }),
 ];
 

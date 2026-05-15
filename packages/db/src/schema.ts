@@ -411,16 +411,25 @@ export type TextCutStatus =
 
 /** One frame ("cut") of the video. The anchor word is implicit (lives on the
  *  parent text_cut_videos row) and always rendered centered + locked; this
- *  shape only describes the variable surrounding content per cut. */
+ *  shape only describes the variable surrounding content per cut.
+ *
+ *  The page is filled top-to-bottom with huge serif text. The anchor word
+ *  appears INLINE on the middle line, with `inlinePrefix` immediately to its
+ *  left and `inlineSuffix` immediately to its right (on the SAME line). The
+ *  `linesAbove` array is rendered as N rows above the anchor line; `linesBelow`
+ *  as N rows below. Each entry is one visual line (no auto-wrap; long lines
+ *  bleed off the edges, which is part of the look). */
 export type TextCutFrame = {
-  /** Optional title-like block above the body. */
-  title?: string | null;
-  /** Sentence/snippet rendered ABOVE the anchor line. */
-  before: string;
-  /** Sentence/snippet rendered BELOW the anchor line. */
-  after: string;
-  /** Visual style hint for layout variety: paragraph | columns | list | quote. */
-  layout: "paragraph" | "columns" | "list" | "quote";
+  /** Visual style hint for typography variety. */
+  layout: "novel" | "typewriter" | "manuscript" | "press" | "marginalia";
+  /** Lines stacked above the anchor line (top → just above anchor). */
+  linesAbove: string[];
+  /** Words on the SAME line as the anchor, immediately before it. May be "". */
+  inlinePrefix: string;
+  /** Words on the SAME line as the anchor, immediately after it. May be "". */
+  inlineSuffix: string;
+  /** Lines stacked below the anchor line (just below anchor → bottom). */
+  linesBelow: string[];
 };
 
 export const textCutVideos = pgTable(
