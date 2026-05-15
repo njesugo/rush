@@ -142,13 +142,14 @@ export async function renderReelV2(opts: RenderReelV2Options): Promise<{
       ...(hookText ? { hook: hookText } : {}),
     });
 
-    // 7. Render. Pass the *local* voice path so the composition can play it
-    //    via a file:// Audio src (we substitute assets.voiceUrl for that).
+    // 7. Render. Pass an HTTPS signed URL for the voice (Remotion's headless
+    //    Chrome can't fetch file:// assets) and HTTPS URLs for screenshots.
+    const voiceSignedUrl = await signFor(voiceKey);
     const storyboardForRender: Storyboard = {
       ...storyboard,
       assets: {
         ...storyboard.assets,
-        voiceUrl: pathToFileUrl(voicePath),
+        voiceUrl: voiceSignedUrl,
       },
     };
     await render({ storyboard: storyboardForRender, voicePath, outPath });
