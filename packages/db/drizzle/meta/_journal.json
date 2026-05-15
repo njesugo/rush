@@ -64,6 +64,13 @@
       "when": 1778760000000,
       "tag": "0008_reels_v2_remotion",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778890000000,
+      "tag": "0009_text_cuts",
+      "breakpoints": true
     }
   ]
 }

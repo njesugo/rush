@@ -25,3 +25,5 @@ export * from "./reels/generate";
 export * from "./reels/extractBroll";
 export * from "./reels/generateRemotionStoryboard";
 export * from "./reels/renderRemotion";
+export * from "./textcut/templates";
+export * from "./textcut/render";

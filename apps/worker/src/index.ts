@@ -11,6 +11,7 @@ import { startYtTranscribeWorker } from "./ytTranscribeWorker";
 import { startReelGenerateWorker } from "./reelGenerateWorker";
 import { startReelExtractBrollWorker } from "./reelExtractBrollWorker";
 import { startReelRenderRemotionWorker } from "./reelRenderRemotionWorker";
+import { startTextCutRenderWorker } from "./textCutRenderWorker";
 
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set");
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
     startReelGenerateWorker(),
     startReelExtractBrollWorker(),
     startReelRenderRemotionWorker(),
+    startTextCutRenderWorker(),
   ];
 
   const shutdown = async (signal: string) => {

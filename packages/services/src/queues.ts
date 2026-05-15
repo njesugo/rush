@@ -16,6 +16,7 @@ export const QUEUE_NAMES = {
   reelGenerate: "reel-generate",
   reelExtractBroll: "reel-extract-broll",
   reelRenderRemotion: "reel-render-remotion",
+  textCutRender: "text-cut-render",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -93,6 +94,11 @@ export interface ReelRenderRemotionJobData {
   reelId: number;
 }
 
+/** Text-match-cut viral video generator. */
+export interface TextCutRenderJobData {
+  videoId: number;
+}
+
 /* ---------- Queue singletons ---------- */
 const _queues = new Map<string, Queue>();
 
@@ -136,5 +142,7 @@ export const reelExtractBrollQueue = () =>
   makeQueue<ReelExtractBrollJobData>(QUEUE_NAMES.reelExtractBroll);
 export const reelRenderRemotionQueue = () =>
   makeQueue<ReelRenderRemotionJobData>(QUEUE_NAMES.reelRenderRemotion);
+export const textCutRenderQueue = () =>
+  makeQueue<TextCutRenderJobData>(QUEUE_NAMES.textCutRender);
 
 export type { JobsOptions };

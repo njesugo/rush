@@ -399,3 +399,48 @@ export const reels = pgTable(
     sourceVideoIdx: index("reels_source_video_idx").on(t.sourceVideoId),
   })
 );
+
+/* ----------- Text-cut videos (viral "text match cut" generator) ----------- */
+export type TextCutLanguage = "fr" | "en";
+
+export type TextCutStatus =
+  | "queued"
+  | "rendering"
+  | "ready"
+  | "failed";
+
+/** One frame ("cut") of the video. The anchor word is implicit (lives on the
+ *  parent text_cut_videos row) and always rendered centered + locked; this
+ *  shape only describes the variable surrounding content per cut. */
+export type TextCutFrame = {
+  /** Optional title-like block above the body. */
+  title?: string | null;
+  /** Sentence/snippet rendered ABOVE the anchor line. */
+  before: string;
+  /** Sentence/snippet rendered BELOW the anchor line. */
+  after: string;
+  /** Visual style hint for layout variety: paragraph | columns | list | quote. */
+  layout: "paragraph" | "columns" | "list" | "quote";
+};
+
+export const textCutVideos = pgTable(
+  "text_cut_videos",
+  {
+    id: serial("id").primaryKey(),
+    word: text("word").notNull(),
+    language: text("language").$type<TextCutLanguage>().notNull().default("fr"),
+    /** The 4-6 frames generated from the templates. Persisted so we can
+     *  re-render or debug without regenerating. */
+    frames: jsonb("frames").$type<TextCutFrame[]>().default([]),
+    /** Storage key of the rendered mp4 (set on success). */
+    renderedVideoKey: text("rendered_video_key"),
+    status: text("status").$type<TextCutStatus>().default("queued").notNull(),
+    error: text("error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    statusIdx: index("text_cut_videos_status_idx").on(t.status),
+    createdIdx: index("text_cut_videos_created_idx").on(t.createdAt),
+  })
+);
